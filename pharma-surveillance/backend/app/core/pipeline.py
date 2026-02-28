@@ -51,12 +51,14 @@ def _compute_district_risk(anomalies: list[dict], correlations: list[dict]) -> l
     return sorted(district_scores.values(), key=lambda x: x["risk_score"], reverse=True)
 
 
-def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
+def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bool = False) -> dict:
     """Run the full surveillance pipeline on pharmacy sales data.
 
     Args:
         df: Raw pharmacy sales DataFrame.
         use_mistral: Whether to call Mistral for interpretations (set False for offline testing).
+        seasonal_adjust: If True, exclude expected seasonal spikes from anomaly detection
+            by normalizing sales against monthly seasonal profiles.
 
     Returns:
         Dict with keys: anomalies, correlations, alerts, insights, weekly_data, summary.
@@ -83,7 +85,7 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
         }
 
     # Step 1: Detect anomalies
-    anomalies = run_all_detections(clean_df)
+    anomalies = run_all_detections(clean_df, seasonal_adjust=seasonal_adjust)
     anomaly_dicts = [a.to_dict() for a in anomalies]
 
     # Step 2: Group anomalies by district and check correlations

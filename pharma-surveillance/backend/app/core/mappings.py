@@ -44,6 +44,38 @@ CORRELATION_RULES = [
     },
 ]
 
+# Monthly seasonal multipliers per drug (1.0 = baseline, >1 = expected higher sales)
+# Based on Indian climate and disease patterns:
+#   - Winter (Nov-Feb): Flu/cold drugs spike
+#   - Summer (Apr-Jun): Waterborne diseases rise
+#   - Monsoon (Jul-Sep): Waterborne + vector-borne peak
+#   - Post-monsoon/Winter (Oct-Dec): Respiratory/pollution spike
+SEASONAL_PROFILES: dict[str, dict[int, float]] = {
+    # Month numbers: 1=Jan ... 12=Dec
+    "salbutamol":      {1: 1.1, 2: 1.0, 3: 0.9, 4: 0.9, 5: 0.8, 6: 0.8, 7: 0.9, 8: 0.9, 9: 1.0, 10: 1.5, 11: 1.8, 12: 1.7},
+    "budesonide":      {1: 1.1, 2: 1.0, 3: 0.9, 4: 0.9, 5: 0.8, 6: 0.8, 7: 0.9, 8: 0.9, 9: 1.0, 10: 1.4, 11: 1.7, 12: 1.6},
+    "montelukast":     {1: 1.1, 2: 1.0, 3: 0.9, 4: 0.9, 5: 0.8, 6: 0.8, 7: 0.9, 8: 0.9, 9: 1.0, 10: 1.4, 11: 1.6, 12: 1.5},
+    "oseltamivir":     {1: 1.8, 2: 1.6, 3: 1.2, 4: 0.8, 5: 0.6, 6: 0.5, 7: 0.6, 8: 0.7, 9: 0.9, 10: 1.0, 11: 1.3, 12: 1.7},
+    "paracetamol":     {1: 1.4, 2: 1.3, 3: 1.1, 4: 1.0, 5: 0.9, 6: 0.9, 7: 1.1, 8: 1.1, 9: 1.0, 10: 1.0, 11: 1.2, 12: 1.4},
+    "cetirizine":      {1: 1.0, 2: 1.1, 3: 1.4, 4: 1.5, 5: 1.3, 6: 1.0, 7: 0.9, 8: 0.9, 9: 1.0, 10: 1.2, 11: 1.3, 12: 1.1},
+    "ors_sachets":     {1: 0.7, 2: 0.8, 3: 1.0, 4: 1.3, 5: 1.6, 6: 1.8, 7: 1.9, 8: 1.8, 9: 1.5, 10: 1.0, 11: 0.8, 12: 0.7},
+    "metronidazole":   {1: 0.8, 2: 0.8, 3: 0.9, 4: 1.2, 5: 1.5, 6: 1.7, 7: 1.8, 8: 1.7, 9: 1.4, 10: 1.0, 11: 0.8, 12: 0.8},
+    "loperamide":      {1: 0.8, 2: 0.8, 3: 0.9, 4: 1.2, 5: 1.4, 6: 1.6, 7: 1.7, 8: 1.6, 9: 1.3, 10: 1.0, 11: 0.8, 12: 0.8},
+    "levothyroxine":   {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0, 11: 1.0, 12: 1.0},
+    "insulin_glargine": {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0, 11: 1.0, 12: 1.0},
+    "amlodipine":      {1: 1.1, 2: 1.1, 3: 1.0, 4: 1.0, 5: 0.9, 6: 0.9, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0, 11: 1.1, 12: 1.1},
+    "azithromycin":    {1: 1.3, 2: 1.2, 3: 1.0, 4: 0.9, 5: 0.8, 6: 0.9, 7: 1.2, 8: 1.3, 9: 1.2, 10: 1.0, 11: 1.1, 12: 1.2},
+}
+
+
+def get_seasonal_multiplier(drug: str, month: int) -> float:
+    """Get the expected seasonal multiplier for a drug in a given month."""
+    profile = SEASONAL_PROFILES.get(drug)
+    if not profile:
+        return 1.0
+    return profile.get(month, 1.0)
+
+
 # All drugs used in synthetic data generation
 ALL_DRUGS = list(DRUG_CONDITION_MAP.keys())
 

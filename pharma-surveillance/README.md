@@ -86,3 +86,7 @@ When deploying, point Streamlit to:
 - **Python dependencies**: `pharma-surveillance/requirements.txt`
 
 This repository includes `pharma-surveillance/requirements.txt`, which forwards to `backend/requirements.txt` so packages like `plotly` are installed in Cloud builds.
+
+## Hackathon planning
+
+For a prioritized improvement roadmap and additional Mistral-focused feature ideas, see `HACKATHON_PLAN.md`.

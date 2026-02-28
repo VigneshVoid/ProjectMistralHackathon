@@ -18,9 +18,8 @@ import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
 
-from app.core.detection import run_all_detections, aggregate_weekly
 from app.core.pipeline import run_pipeline
-from app.core.mappings import DRUG_CONDITION_MAP, DISTRICTS, check_correlations
+from app.core.mappings import DISTRICTS
 from app.seed.generate_synthetic import generate
 from app.config import settings
 
@@ -105,6 +104,23 @@ def severity_badge(severity: str) -> str:
     return f'<span class="severity-{severity}">{severity.upper()}</span>'
 
 
+def render_validation(report: dict) -> None:
+    """Render validation diagnostics from the pipeline."""
+    if not report:
+        return
+
+    for error in report.get("errors", []):
+        st.error(error)
+    for warning in report.get("warnings", []):
+        st.warning(warning)
+
+    st.caption(
+        f"Rows in: {report.get('rows_in', 0):,} | "
+        f"Rows out: {report.get('rows_out', 0):,} | "
+        f"Rows dropped: {report.get('rows_dropped', 0):,}"
+    )
+
+
 def metric_card(label: str, value, color: str = "#0f172a") -> str:
     return f"""
     <div class="metric-card">
@@ -139,6 +155,7 @@ if page == "Dashboard":
     else:
         results = st.session_state.pipeline_results
         summary = results["summary"]
+        render_validation(summary.get("validation", {}))
 
         # Summary metrics row
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -152,6 +169,14 @@ if page == "Dashboard":
             st.markdown(metric_card("Correlations", summary["correlations_found"], "#7c3aed"), unsafe_allow_html=True)
         with c5:
             st.markdown(metric_card("Alerts Generated", summary["alerts_generated"], "#059669"), unsafe_allow_html=True)
+
+        st.divider()
+        st.subheader("Top Districts to Investigate")
+        risk_df = pd.DataFrame(results.get("district_risk", []))
+        if not risk_df.empty:
+            st.dataframe(risk_df.head(5), use_container_width=True)
+        else:
+            st.info("No district risk ranking available yet.")
 
         st.divider()
 
@@ -241,6 +266,7 @@ elif page == "Upload & Analyze":
                     results = run_pipeline(df, use_mistral=use_mistral)
                     st.session_state.pipeline_results = results
                 st.success(f"Found {results['summary']['total_anomalies']} anomalies across {results['summary']['districts_affected']} districts")
+                render_validation(results["summary"].get("validation", {}))
                 st.rerun()
 
     with tab2:
@@ -268,6 +294,7 @@ elif page == "Upload & Analyze":
                 f"Analysis complete: {results['summary']['total_anomalies']} anomalies, "
                 f"{results['summary']['districts_affected']} districts affected"
             )
+            render_validation(results["summary"].get("validation", {}))
             st.rerun()
 
     # Show current data stats if loaded
@@ -322,6 +349,26 @@ elif page == "Anomaly Explorer":
                 filtered = filtered[filtered["severity"].isin(sel_severity)]
 
             st.markdown(f"**{len(filtered)} anomalies** matching filters")
+
+            if not filtered.empty:
+                st.subheader("Why flagged?")
+                selected_row = st.selectbox(
+                    "Select anomaly",
+                    range(len(filtered)),
+                    format_func=lambda i: (
+                        f"{filtered.iloc[i]['drug']} | {filtered.iloc[i]['district']} | "
+                        f"week {filtered.iloc[i]['week']} | {filtered.iloc[i]['severity']}"
+                    ),
+                )
+                row = filtered.iloc[selected_row]
+                st.markdown(
+                    f"**Method triggered:** `{row['anomaly_type']}`  \n"
+                    f"**Baseline:** {row['baseline_value']} units/week  \n"
+                    f"**Actual:** {row['actual_value']} units/week  \n"
+                    f"**Z-score:** {row.get('z_score', 'N/A')}  \n"
+                    f"**% change:** {row.get('pct_change', 'N/A')}  \n"
+                    f"**Confidence:** {row.get('confidence', 'medium')}"
+                )
 
             # Anomaly table
             display_cols = ["severity", "district", "state", "drug", "drug_category",

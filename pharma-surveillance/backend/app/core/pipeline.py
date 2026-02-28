@@ -4,13 +4,51 @@ Pipeline orchestrator: data → detect → correlate → interpret → alert.
 This module ties together the detection engine, Mistral agent, and correlation logic.
 """
 
-from dataclasses import asdict
-
 import pandas as pd
 
-from app.core.detection import run_all_detections, aggregate_weekly, Anomaly
+from app.core.detection import run_all_detections, aggregate_weekly
 from app.core.mappings import check_correlations
-from app.core.mistral_agent import interpret_anomaly, generate_alert, correlate_signals
+from app.core.mistral_agent import interpret_anomaly, generate_alert
+from app.core.validation import validate_and_clean_sales_data
+
+
+def _compute_district_risk(anomalies: list[dict], correlations: list[dict]) -> list[dict]:
+    """Build district-level risk ranking for triage."""
+    severity_weights = {"critical": 5, "high": 3, "medium": 2, "low": 1}
+    corr_by_district: dict[str, int] = {}
+    for c in correlations:
+        corr_by_district[c["district"]] = corr_by_district.get(c["district"], 0) + 1
+
+    district_scores: dict[str, dict] = {}
+    for a in anomalies:
+        district = a["district"]
+        if district not in district_scores:
+            district_scores[district] = {
+                "district": district,
+                "state": a["state"],
+                "anomaly_count": 0,
+                "weighted_severity": 0,
+                "max_severity": a["severity"],
+                "avg_pct_change": 0.0,
+                "risk_score": 0.0,
+            }
+
+        row = district_scores[district]
+        row["anomaly_count"] += 1
+        row["weighted_severity"] += severity_weights.get(a["severity"], 0)
+        if severity_weights.get(a["severity"], 0) > severity_weights.get(row["max_severity"], 0):
+            row["max_severity"] = a["severity"]
+
+        if a.get("pct_change"):
+            row["avg_pct_change"] += float(a["pct_change"])
+
+    for district, row in district_scores.items():
+        corr_bonus = corr_by_district.get(district, 0) * 2
+        trend_bonus = min(row["avg_pct_change"] / max(row["anomaly_count"], 1) / 100.0, 3)
+        row["risk_score"] = round(row["weighted_severity"] + corr_bonus + trend_bonus, 2)
+        row["correlations"] = corr_by_district.get(district, 0)
+
+    return sorted(district_scores.values(), key=lambda x: x["risk_score"], reverse=True)
 
 
 def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
@@ -23,8 +61,29 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
     Returns:
         Dict with keys: anomalies, correlations, alerts, insights, weekly_data, summary.
     """
+    # Step 0: Validate and clean input
+    clean_df, validation_report = validate_and_clean_sales_data(df)
+    if clean_df.empty:
+        return {
+            "anomalies": [],
+            "correlations": [],
+            "alerts": [],
+            "insights": [],
+            "weekly_data": pd.DataFrame(),
+            "district_risk": [],
+            "summary": {
+                "total_records": len(df),
+                "total_anomalies": 0,
+                "severity_breakdown": {},
+                "districts_affected": 0,
+                "correlations_found": 0,
+                "alerts_generated": 0,
+                "validation": validation_report,
+            },
+        }
+
     # Step 1: Detect anomalies
-    anomalies = run_all_detections(df)
+    anomalies = run_all_detections(clean_df)
     anomaly_dicts = [a.to_dict() for a in anomalies]
 
     # Step 2: Group anomalies by district and check correlations
@@ -86,7 +145,7 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
                     })
 
     # Step 4: Aggregate weekly data for charts
-    weekly = aggregate_weekly(df)
+    weekly = aggregate_weekly(clean_df)
 
     # Step 5: Build summary
     severity_counts = {}
@@ -95,13 +154,16 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
 
     districts_affected = len(district_anomalies)
 
+    district_risk = _compute_district_risk(anomaly_dicts, correlations)
+
     summary = {
-        "total_records": len(df),
+        "total_records": len(clean_df),
         "total_anomalies": len(anomaly_dicts),
         "severity_breakdown": severity_counts,
         "districts_affected": districts_affected,
         "correlations_found": len(correlations),
         "alerts_generated": len(alerts),
+        "validation": validation_report,
     }
 
     return {
@@ -110,5 +172,6 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True) -> dict:
         "alerts": alerts,
         "insights": insights,
         "weekly_data": weekly,
+        "district_risk": district_risk,
         "summary": summary,
     }

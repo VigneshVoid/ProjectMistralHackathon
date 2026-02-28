@@ -78,3 +78,11 @@ Settings loading via `pydantic-settings` from `backend/.env`.
 
 ### `backend/requirements.txt`
 Python dependency list for Streamlit UI, plotting, mapping, and analytics/LLM stack.
+
+## Deploy on Streamlit Community Cloud
+
+When deploying, point Streamlit to:
+- **Main file path**: `pharma-surveillance/streamlit_app.py` (or `streamlit_app.py` if repo root is set to `pharma-surveillance`)
+- **Python dependencies**: `pharma-surveillance/requirements.txt`
+
+This repository includes `pharma-surveillance/requirements.txt`, which forwards to `backend/requirements.txt` so packages like `plotly` are installed in Cloud builds.

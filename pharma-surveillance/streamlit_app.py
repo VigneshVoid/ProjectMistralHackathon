@@ -51,7 +51,15 @@ st.markdown("""
     .metric-card p { margin: 0; color: #64748b; font-size: 0.9rem; }
     .alert-card {
         border-left: 4px solid; padding: 1rem; margin-bottom: 0.8rem;
-        border-radius: 0 8px 8px 0; background: #f8fafc;
+        border-radius: 0 8px 8px 0; background: #f8fafc; color: #0f172a;
+        line-height: 1.45;
+    }
+    .alert-card strong { color: #020617; }
+    .alert-card .severity-critical,
+    .alert-card .severity-high,
+    .alert-card .severity-medium,
+    .alert-card .severity-low {
+        margin-left: 0.4rem;
     }
     .alert-critical { border-color: #dc2626; }
     .alert-high { border-color: #ea580c; }

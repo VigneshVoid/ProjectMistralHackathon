@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from app.core.mappings import ALL_DRUGS, DISTRICTS
+from app.core.mappings import ALL_DRUGS, DISTRICTS, get_seasonal_multiplier
 
 # Reproducibility
 SEED = 42
@@ -20,8 +20,8 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # Generation parameters
-START_DATE = date(2024, 1, 1)
-NUM_DAYS = 180  # 6 months
+START_DATE = date(2023, 1, 1)  # Start from 2023 for Year-over-Year comparison
+NUM_DAYS = 365 + 180  # ~18 months: full 2023 + Jan-Jun 2024
 PHARMACIES_PER_DISTRICT = 5
 
 # Baseline daily sales per drug per pharmacy (units)
@@ -71,17 +71,26 @@ def _generate_pharmacy_ids(district: str, n: int) -> list[str]:
 
 
 def _apply_anomalies(df: pd.DataFrame) -> pd.DataFrame:
-    """Inject realistic anomaly patterns into the dataset."""
+    """Inject realistic anomaly patterns into the dataset.
+
+    Anomalies are injected in year 2024 (the "current year") so that 2023
+    serves as a clean historical baseline for Year-over-Year comparison.
+    Week offsets are relative to START_DATE (2023-01-01), so 2024 weeks
+    start around week 52.
+    """
     df = df.copy()
 
-    # --- Anomaly 1: Delhi respiratory spike (Weeks 18-20) ---
+    # Offset: week 0 = 2023-01-01, so 2024-01-01 ≈ week 52
+    YEAR2_OFFSET = 52
+
+    # --- Anomaly 1: Delhi respiratory spike (Weeks 18-20 of 2024) ---
     # Cause: simulated air pollution event
     delhi_districts = ["South Delhi", "North Delhi", "East Delhi"]
     respiratory_drugs = ["salbutamol", "budesonide", "montelukast"]
     mask_delhi = (
         df["district"].isin(delhi_districts)
         & df["drug_generic_name"].isin(respiratory_drugs)
-        & df["week"].between(18, 20)
+        & df["week"].between(YEAR2_OFFSET + 18, YEAR2_OFFSET + 20)
     )
     multipliers = df.loc[mask_delhi, "drug_generic_name"].map(
         {"salbutamol": 4.0, "budesonide": 3.5, "montelukast": 3.0}
@@ -90,14 +99,14 @@ def _apply_anomalies(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[mask_delhi, "quantity_sold"] * multipliers * np.random.uniform(0.8, 1.2, mask_delhi.sum())
     ).astype(int)
 
-    # --- Anomaly 2: Chennai waterborne outbreak (Week 12) ---
+    # --- Anomaly 2: Chennai waterborne outbreak (Week 12 of 2024) ---
     # Cause: simulated water contamination
     chennai_districts = ["Chennai", "Kanchipuram"]
     waterborne_drugs = ["ors_sachets", "metronidazole", "loperamide"]
     mask_chennai = (
         df["district"].isin(chennai_districts)
         & df["drug_generic_name"].isin(waterborne_drugs)
-        & df["week"].between(12, 13)
+        & df["week"].between(YEAR2_OFFSET + 12, YEAR2_OFFSET + 13)
     )
     multipliers_ch = df.loc[mask_chennai, "drug_generic_name"].map(
         {"ors_sachets": 6.0, "metronidazole": 5.0, "loperamide": 4.0}
@@ -106,14 +115,14 @@ def _apply_anomalies(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[mask_chennai, "quantity_sold"] * multipliers_ch * np.random.uniform(0.8, 1.2, mask_chennai.sum())
     ).astype(int)
 
-    # --- Anomaly 3: Pune flu cluster (Weeks 8-10) ---
+    # --- Anomaly 3: Pune flu cluster (Weeks 8-10 of 2024) ---
     # Cause: simulated influenza wave
     pune_districts = ["Pune", "Pimpri-Chinchwad"]
     flu_drugs = ["oseltamivir", "paracetamol", "cetirizine"]
     mask_pune = (
         df["district"].isin(pune_districts)
         & df["drug_generic_name"].isin(flu_drugs)
-        & df["week"].between(8, 10)
+        & df["week"].between(YEAR2_OFFSET + 8, YEAR2_OFFSET + 10)
     )
     multipliers_pune = df.loc[mask_pune, "drug_generic_name"].map(
         {"oseltamivir": 3.5, "paracetamol": 2.5, "cetirizine": 2.0}
@@ -122,16 +131,15 @@ def _apply_anomalies(df: pd.DataFrame) -> pd.DataFrame:
         df.loc[mask_pune, "quantity_sold"] * multipliers_pune * np.random.uniform(0.8, 1.2, mask_pune.sum())
     ).astype(int)
 
-    # --- Anomaly 4: Vizag thyroid anomaly (gradual over months 3-6) ---
+    # --- Anomaly 4: Vizag thyroid anomaly (gradual over months 3-6 of 2024) ---
     # Cause: simulated industrial pollution
     mask_vizag = (
         (df["district"] == "Visakhapatnam")
         & (df["drug_generic_name"] == "levothyroxine")
-        & (df["week"] >= 9)  # ~month 3
+        & (df["week"] >= YEAR2_OFFSET + 9)
     )
-    # Gradual ramp: 1.0 at week 9 → 1.5 at week 25
     weeks_vizag = df.loc[mask_vizag, "week"]
-    ramp = 1.0 + 0.5 * ((weeks_vizag - 9) / (25 - 9)).clip(0, 1)
+    ramp = 1.0 + 0.5 * ((weeks_vizag - (YEAR2_OFFSET + 9)) / (25 - 9)).clip(0, 1)
     df.loc[mask_vizag, "quantity_sold"] = (
         df.loc[mask_vizag, "quantity_sold"] * ramp * np.random.uniform(0.9, 1.1, mask_vizag.sum())
     ).astype(int)
@@ -159,8 +167,10 @@ def generate(output_path: str | Path | None = None) -> pd.DataFrame:
 
                 for drug in drugs_today:
                     base = BASELINE_SALES[drug]
-                    # ±15% random daily variation
-                    quantity = max(1, int(base * np.random.uniform(0.85, 1.15)))
+                    # Apply seasonal multiplier for this drug/month
+                    seasonal_mult = get_seasonal_multiplier(drug, current_date.month)
+                    # ±15% random daily variation on top of seasonal baseline
+                    quantity = max(1, int(base * seasonal_mult * np.random.uniform(0.85, 1.15)))
                     price = UNIT_PRICES[drug]
 
                     rows.append({

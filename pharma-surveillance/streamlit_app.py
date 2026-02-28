@@ -19,7 +19,8 @@ import folium
 from streamlit_folium import st_folium
 
 from app.core.pipeline import run_pipeline
-from app.core.mappings import DISTRICTS
+from app.core.mappings import DISTRICTS, SEASONAL_PROFILES, get_seasonal_multiplier
+from app.core.detection import aggregate_weekly
 from app.seed.generate_synthetic import generate
 from app.config import settings
 
@@ -81,7 +82,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["Dashboard", "Upload & Analyze", "Anomaly Explorer", "Disease Map", "Alerts & Insights"],
+        ["Dashboard", "Upload & Analyze", "Anomaly Explorer", "Year-over-Year", "Disease Map", "Alerts & Insights"],
         index=0,
     )
 
@@ -91,6 +92,13 @@ with st.sidebar:
         "Enable Mistral AI",
         value=bool(settings.mistral_api_key and settings.mistral_api_key != "your-mistral-api-key-here"),
         help="Toggle Mistral-powered interpretations. Requires a valid API key in .env",
+    )
+    seasonal_adjust = st.toggle(
+        "Seasonal Exclusion",
+        value=False,
+        help="Exclude expected seasonal drug spikes from anomaly detection. "
+             "When enabled, drugs that normally sell high in the current month "
+             "(e.g. flu drugs in winter) won't be flagged as anomalies.",
     )
 
     st.divider()
@@ -145,11 +153,11 @@ if page == "Dashboard":
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Generate Synthetic Data & Analyze", type="primary", use_container_width=True):
-                with st.spinner("Generating 6 months of synthetic pharmacy data..."):
+                with st.spinner("Generating 18 months of synthetic pharmacy data (2023-2024)..."):
                     df = generate()
                     st.session_state.df = df
                 with st.spinner("Running anomaly detection pipeline..."):
-                    results = run_pipeline(df, use_mistral=use_mistral)
+                    results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
                     st.session_state.pipeline_results = results
                 st.rerun()
     else:
@@ -263,7 +271,7 @@ elif page == "Upload & Analyze":
 
             if st.button("Run Analysis", type="primary"):
                 with st.spinner("Running anomaly detection pipeline..."):
-                    results = run_pipeline(df, use_mistral=use_mistral)
+                    results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
                     st.session_state.pipeline_results = results
                 st.success(f"Found {results['summary']['total_anomalies']} anomalies across {results['summary']['districts_affected']} districts")
                 render_validation(results["summary"].get("validation", {}))
@@ -271,24 +279,26 @@ elif page == "Upload & Analyze":
 
     with tab2:
         st.markdown(
-            "Generate 6 months of synthetic pharmacy sales data across 20 Indian districts "
-            "with **4 injected anomaly scenarios**:"
+            "Generate 18 months (Jan 2023 – Jun 2024) of synthetic pharmacy sales data across 20 Indian districts "
+            "with **seasonal variation** and **4 injected anomaly scenarios** in 2024:"
         )
         st.markdown("""
-        1. **Delhi Respiratory Spike** (Weeks 18-20) — Air pollution event
-        2. **Chennai Waterborne Outbreak** (Week 12) — Water contamination
-        3. **Pune Flu Cluster** (Weeks 8-10) — Influenza wave
-        4. **Vizag Thyroid Anomaly** (Months 3-6) — Industrial pollution
+        1. **Delhi Respiratory Spike** (Weeks 18-20 of 2024) — Air pollution event
+        2. **Chennai Waterborne Outbreak** (Week 12 of 2024) — Water contamination
+        3. **Pune Flu Cluster** (Weeks 8-10 of 2024) — Influenza wave
+        4. **Vizag Thyroid Anomaly** (Months 3-6 of 2024) — Industrial pollution
+
+        2023 data serves as a clean seasonal baseline for Year-over-Year comparison.
         """)
 
         if st.button("Generate & Analyze", type="primary", use_container_width=True):
-            with st.spinner("Generating synthetic data..."):
+            with st.spinner("Generating synthetic data (2023-2024)..."):
                 df = generate()
                 st.session_state.df = df
             st.success(f"Generated {len(df):,} pharmacy sales records")
 
             with st.spinner("Running anomaly detection pipeline..."):
-                results = run_pipeline(df, use_mistral=use_mistral)
+                results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
                 st.session_state.pipeline_results = results
             st.success(
                 f"Analysis complete: {results['summary']['total_anomalies']} anomalies, "
@@ -440,6 +450,256 @@ elif page == "Anomaly Explorer":
                 )
                 fig_heat.update_layout(height=500, margin=dict(t=20, b=20))
                 st.plotly_chart(fig_heat, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
+# PAGE: Year-over-Year Comparison
+# ---------------------------------------------------------------------------
+elif page == "Year-over-Year":
+    st.title("Year-over-Year Comparison")
+    st.markdown(
+        "Compare drug sales for a selected month against the **same month last year** "
+        "to identify true anomalies vs. expected seasonal patterns."
+    )
+
+    if st.session_state.df is None:
+        st.warning("No data loaded. Go to **Upload & Analyze** to load data first.")
+    else:
+        df_raw = st.session_state.df.copy()
+        df_raw["date"] = pd.to_datetime(df_raw["date"])
+        df_raw["month"] = df_raw["date"].dt.month
+        df_raw["year"] = df_raw["date"].dt.year
+        df_raw["month_name"] = df_raw["date"].dt.strftime("%B")
+
+        available_years = sorted(df_raw["year"].unique())
+
+        if len(available_years) < 2:
+            st.info(
+                "Year-over-Year comparison requires data spanning at least 2 years. "
+                "Generate synthetic data (which covers 2023-2024) to use this feature."
+            )
+        else:
+            # Controls
+            ctrl1, ctrl2, ctrl3 = st.columns(3)
+            with ctrl1:
+                # Only show months that exist in both years
+                current_year = max(available_years)
+                prev_year = current_year - 1
+                months_current = set(df_raw[df_raw["year"] == current_year]["month"].unique())
+                months_prev = set(df_raw[df_raw["year"] == prev_year]["month"].unique())
+                common_months = sorted(months_current & months_prev)
+
+                if not common_months:
+                    st.warning("No overlapping months between years for comparison.")
+                    st.stop()
+
+                month_names = {
+                    1: "January", 2: "February", 3: "March", 4: "April",
+                    5: "May", 6: "June", 7: "July", 8: "August",
+                    9: "September", 10: "October", 11: "November", 12: "December",
+                }
+                sel_month = st.selectbox(
+                    "Select Month",
+                    common_months,
+                    format_func=lambda m: month_names[m],
+                )
+            with ctrl2:
+                all_districts = sorted(df_raw["district"].unique())
+                sel_yoy_district = st.selectbox("Select District", ["All Districts"] + all_districts)
+            with ctrl3:
+                all_drugs = sorted(df_raw["drug_generic_name"].unique())
+                sel_yoy_drug = st.selectbox("Select Drug", ["All Drugs"] + all_drugs)
+
+            # Filter data
+            df_current = df_raw[(df_raw["year"] == current_year) & (df_raw["month"] == sel_month)]
+            df_prev = df_raw[(df_raw["year"] == prev_year) & (df_raw["month"] == sel_month)]
+
+            if sel_yoy_district != "All Districts":
+                df_current = df_current[df_current["district"] == sel_yoy_district]
+                df_prev = df_prev[df_prev["district"] == sel_yoy_district]
+            if sel_yoy_drug != "All Drugs":
+                df_current = df_current[df_current["drug_generic_name"] == sel_yoy_drug]
+                df_prev = df_prev[df_prev["drug_generic_name"] == sel_yoy_drug]
+
+            # Aggregate monthly totals
+            def _agg_monthly(df_slice, label):
+                agg = (
+                    df_slice.groupby(["drug_generic_name", "drug_category"])
+                    .agg(total_sold=("quantity_sold", "sum"))
+                    .reset_index()
+                )
+                agg["period"] = label
+                return agg
+
+            agg_current = _agg_monthly(df_current, f"{month_names[sel_month]} {current_year}")
+            agg_prev = _agg_monthly(df_prev, f"{month_names[sel_month]} {prev_year}")
+
+            # Summary metrics
+            st.divider()
+            total_current = int(agg_current["total_sold"].sum())
+            total_prev = int(agg_prev["total_sold"].sum())
+            yoy_change = ((total_current - total_prev) / max(total_prev, 1)) * 100
+
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            with mc1:
+                st.markdown(
+                    metric_card(f"{month_names[sel_month]} {prev_year}", f"{total_prev:,}"),
+                    unsafe_allow_html=True,
+                )
+            with mc2:
+                st.markdown(
+                    metric_card(f"{month_names[sel_month]} {current_year}", f"{total_current:,}"),
+                    unsafe_allow_html=True,
+                )
+            with mc3:
+                color = "#dc2626" if yoy_change > 50 else "#059669" if yoy_change < 20 else "#ea580c"
+                st.markdown(
+                    metric_card("YoY Change", f"{yoy_change:+.1f}%", color),
+                    unsafe_allow_html=True,
+                )
+            with mc4:
+                seasonal_mult = get_seasonal_multiplier(
+                    sel_yoy_drug if sel_yoy_drug != "All Drugs" else "paracetamol", sel_month
+                )
+                label = "Expected Seasonal" if sel_yoy_drug != "All Drugs" else "Avg Seasonal"
+                st.markdown(
+                    metric_card(label, f"{seasonal_mult:.1f}x"),
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # Side-by-side bar chart: current year vs previous year by drug
+            st.subheader(f"Drug Sales: {month_names[sel_month]} {prev_year} vs {current_year}")
+            combined = pd.concat([agg_prev, agg_current], ignore_index=True)
+            if not combined.empty:
+                fig_yoy = px.bar(
+                    combined,
+                    x="drug_generic_name",
+                    y="total_sold",
+                    color="period",
+                    barmode="group",
+                    labels={"drug_generic_name": "Drug", "total_sold": "Total Units Sold", "period": "Period"},
+                    color_discrete_sequence=["#94a3b8", "#3b82f6"],
+                )
+                fig_yoy.update_layout(
+                    margin=dict(t=20, b=40), height=420,
+                    xaxis_tickangle=-45,
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig_yoy, use_container_width=True)
+
+            # Per-drug YoY change table
+            st.subheader("Per-Drug Year-over-Year Change")
+            merged = agg_prev[["drug_generic_name", "drug_category", "total_sold"]].merge(
+                agg_current[["drug_generic_name", "total_sold"]],
+                on="drug_generic_name",
+                how="outer",
+                suffixes=(f"_{prev_year}", f"_{current_year}"),
+            ).fillna(0)
+
+            merged["yoy_change_%"] = (
+                (merged[f"total_sold_{current_year}"] - merged[f"total_sold_{prev_year}"])
+                / merged[f"total_sold_{prev_year}"].replace(0, 1)
+                * 100
+            ).round(1)
+
+            # Add seasonal context
+            merged["seasonal_multiplier"] = merged["drug_generic_name"].apply(
+                lambda d: get_seasonal_multiplier(d, sel_month)
+            )
+            merged["above_seasonal"] = merged.apply(
+                lambda row: "YES" if row["yoy_change_%"] > (row["seasonal_multiplier"] - 1) * 100 + 50 else "no",
+                axis=1,
+            )
+
+            st.dataframe(
+                merged.sort_values("yoy_change_%", ascending=False),
+                use_container_width=True,
+                height=400,
+            )
+
+            # District-level YoY heatmap (if not filtered to single district)
+            if sel_yoy_district == "All Districts":
+                st.divider()
+                st.subheader("District-Level YoY Change Heatmap")
+
+                dist_current = (
+                    df_current.groupby(["district", "drug_generic_name"])
+                    .agg(total=("quantity_sold", "sum"))
+                    .reset_index()
+                )
+                dist_prev = (
+                    df_prev.groupby(["district", "drug_generic_name"])
+                    .agg(total=("quantity_sold", "sum"))
+                    .reset_index()
+                )
+                dist_merged = dist_prev.merge(
+                    dist_current,
+                    on=["district", "drug_generic_name"],
+                    how="outer",
+                    suffixes=("_prev", "_curr"),
+                ).fillna(0)
+
+                dist_merged["yoy_pct"] = (
+                    (dist_merged["total_curr"] - dist_merged["total_prev"])
+                    / dist_merged["total_prev"].replace(0, 1)
+                    * 100
+                ).round(1)
+
+                if sel_yoy_drug != "All Drugs":
+                    dist_merged = dist_merged[dist_merged["drug_generic_name"] == sel_yoy_drug]
+
+                if not dist_merged.empty:
+                    heat_pivot = dist_merged.pivot(
+                        index="district", columns="drug_generic_name", values="yoy_pct"
+                    ).fillna(0)
+                    fig_heat = px.imshow(
+                        heat_pivot,
+                        color_continuous_scale="RdYlBu_r",
+                        color_continuous_midpoint=0,
+                        labels=dict(color="YoY Change %"),
+                        aspect="auto",
+                    )
+                    fig_heat.update_layout(height=500, margin=dict(t=20, b=20))
+                    st.plotly_chart(fig_heat, use_container_width=True)
+
+            # Seasonal profile visualization
+            st.divider()
+            st.subheader("Seasonal Profile Reference")
+            st.caption(
+                "Expected monthly sales multipliers based on historical patterns. "
+                "A multiplier of 1.8x means sales are expected to be 80% higher than average in that month."
+            )
+            if sel_yoy_drug != "All Drugs":
+                profile_drugs = [sel_yoy_drug]
+            else:
+                profile_drugs = sorted(SEASONAL_PROFILES.keys())[:6]
+
+            profile_rows = []
+            for drug in profile_drugs:
+                for m in range(1, 13):
+                    profile_rows.append({
+                        "Drug": drug,
+                        "Month": month_names[m][:3],
+                        "Month_num": m,
+                        "Multiplier": get_seasonal_multiplier(drug, m),
+                    })
+            profile_df = pd.DataFrame(profile_rows)
+            fig_profile = px.line(
+                profile_df,
+                x="Month",
+                y="Multiplier",
+                color="Drug",
+                markers=True,
+                labels={"Multiplier": "Seasonal Multiplier"},
+            )
+            fig_profile.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="Baseline")
+            fig_profile.update_layout(
+                margin=dict(t=20, b=40), height=350,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig_profile, use_container_width=True)
 
 
 # ---------------------------------------------------------------------------

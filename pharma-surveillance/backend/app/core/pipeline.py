@@ -2,9 +2,13 @@
 Pipeline orchestrator: data → detect → correlate → interpret → alert.
 
 This module ties together the detection engine, Mistral agent, and correlation logic.
+Uses ThreadPoolExecutor for parallel Mistral API calls.
 """
 
+import time
+
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.core.detection import run_all_detections, aggregate_weekly
 from app.core.mappings import check_correlations
@@ -51,14 +55,50 @@ def _compute_district_risk(anomalies: list[dict], correlations: list[dict]) -> l
     return sorted(district_scores.values(), key=lambda x: x["risk_score"], reverse=True)
 
 
+def _safe_interpret(anomaly: dict, delay: float = 0) -> dict:
+    """Interpret a single anomaly, catching errors."""
+    if delay > 0:
+        time.sleep(delay)
+    try:
+        interpretation = interpret_anomaly(anomaly)
+        return {"anomaly": anomaly, "interpretation": interpretation}
+    except Exception as e:
+        return {
+            "anomaly": anomaly,
+            "interpretation": {"error": f"Mistral unavailable: {e}"},
+        }
+
+
+def _safe_alert(district: str, state: str, high_severity: list[dict], delay: float = 0) -> dict:
+    """Generate an alert for a district, catching errors."""
+    if delay > 0:
+        time.sleep(delay)
+    try:
+        alert_data = generate_alert(high_severity)
+        return {
+            "district": district,
+            "state": state,
+            "alert_data": alert_data,
+            "anomaly_count": len(high_severity),
+            "max_severity": high_severity[0]["severity"],
+        }
+    except Exception as e:
+        return {
+            "district": district,
+            "state": state,
+            "alert_data": {"error": f"Alert generation failed: {e}"},
+            "anomaly_count": len(high_severity),
+            "max_severity": high_severity[0]["severity"],
+        }
+
+
 def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bool = False) -> dict:
     """Run the full surveillance pipeline on pharmacy sales data.
 
     Args:
         df: Raw pharmacy sales DataFrame.
-        use_mistral: Whether to call Mistral for interpretations (set False for offline testing).
-        seasonal_adjust: If True, exclude expected seasonal spikes from anomaly detection
-            by normalizing sales against monthly seasonal profiles.
+        use_mistral: Whether to call Mistral for interpretations.
+        seasonal_adjust: If True, exclude expected seasonal spikes from anomaly detection.
 
     Returns:
         Dict with keys: anomalies, correlations, alerts, insights, weekly_data, summary.
@@ -104,47 +144,28 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bo
                 **rule,
             })
 
-    # Step 3: Generate Mistral interpretations (if enabled)
+    # Step 3: Generate Mistral interpretations (parallel execution)
     insights = []
     alerts = []
 
     if use_mistral and anomaly_dicts:
-        # Interpret top anomalies (limit to avoid API rate limits)
+        # Interpret top anomalies (staggered to avoid rate limits)
         top_anomalies = [a for a in anomaly_dicts if a["severity"] in ("critical", "high")][:10]
-        for a in top_anomalies:
-            try:
-                interpretation = interpret_anomaly(a)
-                insights.append({
-                    "anomaly": a,
-                    "interpretation": interpretation,
-                })
-            except Exception as e:
-                insights.append({
-                    "anomaly": a,
-                    "interpretation": f"[Mistral unavailable: {e}]",
-                })
 
-        # Generate alerts per district cluster
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit interpretation tasks with staggered delays
+            interpret_futures = {
+                executor.submit(_safe_interpret, a, i * 0.5): a
+                for i, a in enumerate(top_anomalies)
+            }
+            for future in as_completed(interpret_futures):
+                insights.append(future.result())
+
+        # Generate alerts sequentially to respect rate limits
         for district, dist_anomalies in district_anomalies.items():
             high_severity = [a for a in dist_anomalies if a["severity"] in ("critical", "high")]
             if high_severity:
-                try:
-                    alert_text = generate_alert(high_severity)
-                    alerts.append({
-                        "district": district,
-                        "state": high_severity[0]["state"],
-                        "alert_text": alert_text,
-                        "anomaly_count": len(high_severity),
-                        "max_severity": high_severity[0]["severity"],
-                    })
-                except Exception as e:
-                    alerts.append({
-                        "district": district,
-                        "state": high_severity[0]["state"],
-                        "alert_text": f"[Alert generation failed: {e}]",
-                        "anomaly_count": len(high_severity),
-                        "max_severity": high_severity[0]["severity"],
-                    })
+                alerts.append(_safe_alert(district, high_severity[0]["state"], high_severity, delay=0.3))
 
     # Step 4: Aggregate weekly data for charts
     weekly = aggregate_weekly(clean_df)
@@ -155,7 +176,6 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bo
         severity_counts[a["severity"]] = severity_counts.get(a["severity"], 0) + 1
 
     districts_affected = len(district_anomalies)
-
     district_risk = _compute_district_risk(anomaly_dicts, correlations)
 
     summary = {

@@ -1,10 +1,11 @@
 """
 Anomaly detection engine for pharmacy sales data.
 
-Three detection methods operating on drug sales grouped by (district, drug, week):
+Four detection methods operating on drug sales grouped by (district, drug, week):
 1. Z-Score — flag where weekly sales exceed 2σ from 8-week rolling mean
 2. IQR Outlier — flag values outside 1.5× IQR of district history
-3. Percentage Spike — flag week-over-week increase > 200%
+3. Percentage Spike — flag week-over-week increase > 200% or decrease < -66%
+4. EWMA — Exponentially Weighted Moving Average with α=0.3
 """
 
 from dataclasses import dataclass, asdict
@@ -21,7 +22,7 @@ class Anomaly:
     state: str
     drug: str
     drug_category: str
-    anomaly_type: str  # "z_score" | "iqr_outlier" | "pct_spike"
+    anomaly_type: str  # "z_score" | "iqr_outlier" | "pct_spike" | "pct_drop" | "ewma"
     severity: str  # "critical" | "high" | "medium" | "low"
     baseline_value: float
     actual_value: float
@@ -30,6 +31,7 @@ class Anomaly:
     date_range: str
     confidence: str
     pct_change: float | None = None
+    direction: str = "spike"  # "spike" or "drop"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -39,7 +41,7 @@ def _classify_severity(z: float | None, pct: float | None) -> str:
     """Classify anomaly severity based on deviation magnitude."""
     score = abs(z) if z else 0
     if pct:
-        score = max(score, pct / 100)
+        score = max(score, abs(pct) / 100)
     if score >= 4:
         return "critical"
     if score >= 3:
@@ -81,6 +83,14 @@ def aggregate_weekly(df: pd.DataFrame) -> pd.DataFrame:
     return weekly.sort_values(["district", "drug_generic_name", "week"])
 
 
+def _seasonal_adjust(sales, drug, months):
+    """Apply seasonal adjustment to sales values."""
+    return np.array([
+        val / get_seasonal_multiplier(drug, int(m))
+        for val, m in zip(sales, months)
+    ])
+
+
 def detect_zscore(
     weekly: pd.DataFrame,
     window: int = 8,
@@ -89,10 +99,7 @@ def detect_zscore(
 ) -> list[Anomaly]:
     """Z-Score detection: flag weeks where sales exceed threshold σ from rolling mean.
 
-    Args:
-        seasonal_adjust: If True, normalize sales by the drug's seasonal multiplier
-            for each month before computing z-scores.  This prevents expected
-            seasonal spikes (e.g. flu drugs in winter) from triggering false positives.
+    Detects both upward spikes (z > threshold) and sudden drops (z < -threshold).
     """
     anomalies = []
 
@@ -104,12 +111,8 @@ def detect_zscore(
         weeks = group["week"].values
         months = group["month"].values if "month" in group.columns else None
 
-        # Seasonal adjustment: divide sales by expected seasonal multiplier
         if seasonal_adjust and months is not None:
-            adjusted_sales = np.array([
-                val / get_seasonal_multiplier(drug, int(m))
-                for val, m in zip(sales, months)
-            ])
+            adjusted_sales = _seasonal_adjust(sales, drug, months)
         else:
             adjusted_sales = sales
 
@@ -126,6 +129,8 @@ def detect_zscore(
                 continue
 
             z = (adjusted_sales[i] - mu) / sigma
+
+            # Upward spike
             if z > threshold:
                 drug_info = DRUG_CONDITION_MAP.get(drug, {})
                 anomalies.append(Anomaly(
@@ -141,6 +146,25 @@ def detect_zscore(
                     week=int(weeks[i]),
                     date_range=_week_to_date_range(int(weeks[i])),
                     confidence=drug_info.get("confidence", "medium"),
+                    direction="spike",
+                ))
+            # Sudden drop (supply chain issue / stockout)
+            elif z < -threshold:
+                drug_info = DRUG_CONDITION_MAP.get(drug, {})
+                anomalies.append(Anomaly(
+                    district=district,
+                    state=state,
+                    drug=drug,
+                    drug_category=category,
+                    anomaly_type="z_score_drop",
+                    severity=_classify_severity(z, None),
+                    baseline_value=round(mu, 1),
+                    actual_value=float(sales[i]),
+                    z_score=round(z, 2),
+                    week=int(weeks[i]),
+                    date_range=_week_to_date_range(int(weeks[i])),
+                    confidence=drug_info.get("confidence", "medium"),
+                    direction="drop",
                 ))
 
     return anomalies
@@ -158,10 +182,7 @@ def detect_iqr(weekly: pd.DataFrame, k: float = 1.5, seasonal_adjust: bool = Fal
         months = group["month"].values if "month" in group.columns else None
 
         if seasonal_adjust and months is not None:
-            adjusted_sales = np.array([
-                val / get_seasonal_multiplier(drug, int(m))
-                for val, m in zip(sales, months)
-            ])
+            adjusted_sales = _seasonal_adjust(sales, drug, months)
         else:
             adjusted_sales = sales
 
@@ -171,6 +192,7 @@ def detect_iqr(weekly: pd.DataFrame, k: float = 1.5, seasonal_adjust: bool = Fal
         q1, q3 = np.percentile(adjusted_sales, [25, 75])
         iqr = q3 - q1
         upper = q3 + k * iqr
+        lower = q1 - k * iqr
 
         if iqr == 0:
             continue
@@ -192,15 +214,35 @@ def detect_iqr(weekly: pd.DataFrame, k: float = 1.5, seasonal_adjust: bool = Fal
                     week=int(week),
                     date_range=_week_to_date_range(int(week)),
                     confidence=drug_info.get("confidence", "medium"),
+                    direction="spike",
+                ))
+            elif adj_val < lower:
+                z_approx = (adj_val - np.mean(adjusted_sales)) / max(np.std(adjusted_sales), 1)
+                drug_info = DRUG_CONDITION_MAP.get(drug, {})
+                anomalies.append(Anomaly(
+                    district=district,
+                    state=state,
+                    drug=drug,
+                    drug_category=category,
+                    anomaly_type="iqr_drop",
+                    severity=_classify_severity(z_approx, None),
+                    baseline_value=round(float(q1), 1),
+                    actual_value=float(val),
+                    z_score=round(z_approx, 2),
+                    week=int(week),
+                    date_range=_week_to_date_range(int(week)),
+                    confidence=drug_info.get("confidence", "medium"),
+                    direction="drop",
                 ))
 
     return anomalies
 
 
 def detect_pct_spike(
-    weekly: pd.DataFrame, threshold: float = 200.0, seasonal_adjust: bool = False,
+    weekly: pd.DataFrame, threshold: float = 200.0, drop_threshold: float = -66.0,
+    seasonal_adjust: bool = False,
 ) -> list[Anomaly]:
-    """Percentage spike detection: flag week-over-week increases > threshold%."""
+    """Percentage change detection: flag week-over-week increases > threshold% or drops < drop_threshold%."""
     anomalies = []
 
     for (district, state, drug, category), group in weekly.groupby(
@@ -212,10 +254,7 @@ def detect_pct_spike(
         months = group["month"].values if "month" in group.columns else None
 
         if seasonal_adjust and months is not None:
-            adjusted_sales = np.array([
-                val / get_seasonal_multiplier(drug, int(m))
-                for val, m in zip(sales, months)
-            ])
+            adjusted_sales = _seasonal_adjust(sales, drug, months)
         else:
             adjusted_sales = sales
 
@@ -241,27 +280,98 @@ def detect_pct_spike(
                     date_range=_week_to_date_range(int(weeks[i])),
                     confidence=drug_info.get("confidence", "medium"),
                     pct_change=round(pct, 1),
+                    direction="spike",
+                ))
+            elif pct < drop_threshold:
+                drug_info = DRUG_CONDITION_MAP.get(drug, {})
+                anomalies.append(Anomaly(
+                    district=district,
+                    state=state,
+                    drug=drug,
+                    drug_category=category,
+                    anomaly_type="pct_drop",
+                    severity=_classify_severity(None, pct),
+                    baseline_value=float(sales[i - 1]),
+                    actual_value=float(sales[i]),
+                    z_score=None,
+                    week=int(weeks[i]),
+                    date_range=_week_to_date_range(int(weeks[i])),
+                    confidence=drug_info.get("confidence", "medium"),
+                    pct_change=round(pct, 1),
+                    direction="drop",
+                ))
+
+    return anomalies
+
+
+def detect_ewma(
+    weekly: pd.DataFrame,
+    alpha: float = 0.3,
+    threshold: float = 2.0,
+    seasonal_adjust: bool = False,
+) -> list[Anomaly]:
+    """EWMA detection: flag values deviating from exponentially weighted moving average."""
+    anomalies = []
+
+    for (district, state, drug, category), group in weekly.groupby(
+        ["district", "state", "drug_generic_name", "drug_category"]
+    ):
+        group = group.sort_values("week")
+        sales = group["total_sold"].values.astype(float)
+        weeks = group["week"].values
+        months = group["month"].values if "month" in group.columns else None
+
+        if seasonal_adjust and months is not None:
+            adjusted_sales = _seasonal_adjust(sales, drug, months)
+        else:
+            adjusted_sales = sales
+
+        if len(adjusted_sales) < 5:
+            continue
+
+        ewma = pd.Series(adjusted_sales).ewm(alpha=alpha, min_periods=3).mean()
+        ewma_std = pd.Series(adjusted_sales).ewm(alpha=alpha, min_periods=3).std()
+
+        for i in range(3, len(adjusted_sales)):
+            mu = ewma.iloc[i - 1]
+            sigma = ewma_std.iloc[i - 1]
+            if sigma == 0 or np.isnan(sigma) or np.isnan(mu):
+                continue
+
+            z = (adjusted_sales[i] - mu) / sigma
+            if abs(z) > threshold:
+                drug_info = DRUG_CONDITION_MAP.get(drug, {})
+                direction = "spike" if z > 0 else "drop"
+                anomalies.append(Anomaly(
+                    district=district,
+                    state=state,
+                    drug=drug,
+                    drug_category=category,
+                    anomaly_type="ewma",
+                    severity=_classify_severity(z, None),
+                    baseline_value=round(mu, 1),
+                    actual_value=float(sales[i]),
+                    z_score=round(z, 2),
+                    week=int(weeks[i]),
+                    date_range=_week_to_date_range(int(weeks[i])),
+                    confidence=drug_info.get("confidence", "medium"),
+                    direction=direction,
                 ))
 
     return anomalies
 
 
 def run_all_detections(df: pd.DataFrame, seasonal_adjust: bool = False) -> list[Anomaly]:
-    """Run all three detection methods and return deduplicated anomalies.
-
-    Args:
-        seasonal_adjust: If True, normalize sales by expected seasonal multipliers
-            before detection.  This excludes spikes that are expected for the current
-            month based on historical seasonal patterns (e.g. cold drugs in winter).
-    """
+    """Run all four detection methods and return deduplicated anomalies."""
     weekly = aggregate_weekly(df)
 
     z_anomalies = detect_zscore(weekly, seasonal_adjust=seasonal_adjust)
     iqr_anomalies = detect_iqr(weekly, seasonal_adjust=seasonal_adjust)
     pct_anomalies = detect_pct_spike(weekly, seasonal_adjust=seasonal_adjust)
+    ewma_anomalies = detect_ewma(weekly, seasonal_adjust=seasonal_adjust)
 
     # Deduplicate: keep the most severe per (district, drug, week)
-    all_anomalies = z_anomalies + iqr_anomalies + pct_anomalies
+    all_anomalies = z_anomalies + iqr_anomalies + pct_anomalies + ewma_anomalies
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
     seen: dict[tuple, Anomaly] = {}

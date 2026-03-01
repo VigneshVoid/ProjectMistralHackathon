@@ -104,6 +104,24 @@ DISTRICTS = [
 ]
 
 
+# State to regional language mapping for multilingual alert localization
+STATE_LANGUAGES: dict[str, list[str]] = {
+    "Delhi": ["Hindi"],
+    "Tamil Nadu": ["Tamil", "Hindi"],
+    "Maharashtra": ["Marathi", "Hindi"],
+    "Andhra Pradesh": ["Telugu", "Hindi"],
+    "Telangana": ["Telugu", "Hindi"],
+    "Karnataka": ["Kannada", "Hindi"],
+    "West Bengal": ["Bengali", "Hindi"],
+    "Uttar Pradesh": ["Hindi"],
+    "Rajasthan": ["Hindi"],
+    "Gujarat": ["Gujarati", "Hindi"],
+    "Madhya Pradesh": ["Hindi"],
+    "Bihar": ["Hindi"],
+    "Kerala": ["Malayalam", "Hindi"],
+}
+
+
 def get_condition_for_drug(drug_name: str) -> dict | None:
     """Look up the condition mapping for a drug."""
     return DRUG_CONDITION_MAP.get(drug_name)

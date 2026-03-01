@@ -339,9 +339,15 @@ def run_pipeline_with_progress(
         "use_mistral": use_mistral,
         "seasonal_adjust": seasonal_adjust,
     }
-    if "progress_callback" in inspect.signature(run_pipeline).parameters:
-        kwargs["progress_callback"] = progress_callback
-    return run_pipeline(df, **kwargs)
+    try:
+        if "progress_callback" in inspect.signature(run_pipeline).parameters:
+            kwargs["progress_callback"] = progress_callback
+        return run_pipeline(df, **kwargs)
+    except TypeError as exc:
+        # Some environments may resolve an older pipeline module at runtime.
+        if "progress_callback" in str(exc):
+            return run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
+        raise
 
 
 # ---------------------------------------------------------------------------

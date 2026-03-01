@@ -1168,7 +1168,7 @@ elif page == "Disease Map":
 
             severity_colors = {"critical": "red", "high": "orange", "medium": "beige", "low": "blue"}
 
-            m = folium.Map(location=[20.5, 78.9], zoom_start=5, tiles="CartoDB dark_matter")
+            m = folium.Map(location=[20, 0], zoom_start=2, tiles="CartoDB dark_matter")
 
             for _, row in district_stats.iterrows():
                 dist_info = district_lookup.get(row["district"])
@@ -1179,8 +1179,10 @@ elif page == "Disease Map":
                 # Scale radius with sqrt so markers stay readable (8-30px range)
                 radius = max(8, min(30, 8 + math.sqrt(row["anomaly_count"]) * 1.5))
 
+                country = dist_info.get("country", "")
                 popup_html = (
                     f"<b>{html.escape(row['district'])}</b><br>"
+                    f"Country: {html.escape(country)}<br>"
                     f"Anomalies: {row['anomaly_count']}<br>"
                     f"Severity: {row['max_severity'].upper()}<br>"
                     f"Drugs: {html.escape(row['drugs'])}<br>"

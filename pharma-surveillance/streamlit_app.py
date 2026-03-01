@@ -45,35 +45,269 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
-    .main .block-container { padding-top: 1rem; }
-    .severity-critical { color: #fff; background: #dc2626; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 0.85em; }
-    .severity-high { color: #fff; background: #ea580c; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 0.85em; }
-    .severity-medium { color: #000; background: #facc15; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 0.85em; }
-    .severity-low { color: #fff; background: #2563eb; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 0.85em; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    /* Global Typography & Background */
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    
+    .stApp {
+        background: radial-gradient(circle at top center, #0f172a 0%, #020617 100%) !important;
+    }
+    
+    /* LHS / Sidebar Glassmorphism */
+    [data-testid="stSidebar"] {
+        background: rgba(15, 23, 42, 0.45) !important;
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Global Text Color Overrides for Dark Mode */
+    [data-testid="stMainBlockContainer"] h1,
+    [data-testid="stMainBlockContainer"] h2,
+    [data-testid="stMainBlockContainer"] h3 {
+        color: #f8fafc !important;
+        letter-spacing: -0.02em;
+    }
+    [data-testid="stMainBlockContainer"] p,
+    [data-testid="stMainBlockContainer"] span,
+    [data-testid="stMainBlockContainer"] label,
+    [data-testid="stMainBlockContainer"] li,
+    [data-testid="stMainBlockContainer"] div {
+        color: #cbd5e1;
+    }
+
+    .main .block-container { 
+        padding-top: 2rem; 
+        max-width: 1400px;
+    }
+    
+    /* Glowing, Premium Severity Badges */
+    .severity-critical { color: #fff !important; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 4px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85em; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4); text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .severity-high { color: #fff !important; background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 4px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85em; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4); text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .severity-medium { color: #1e293b !important; background: linear-gradient(135deg, #fde047 0%, #facc15 100%); padding: 4px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85em; box-shadow: 0 4px 14px rgba(250, 204, 21, 0.3); }
+    .severity-low { color: #fff !important; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 4px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85em; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    
+    /* Glassmorphic Metric Cards with Micro-interactions */
     .metric-card {
-        background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
-        padding: 1.2rem; text-align: center;
+        background: rgba(30, 41, 59, 0.5);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08); 
+        border-radius: 24px;
+        padding: 1.7rem; 
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        position: relative;
+        overflow: hidden;
     }
-    .metric-card h2 { margin: 0; font-size: 2rem; color: #0f172a; }
-    .metric-card p { margin: 0; color: #64748b; font-size: 0.9rem; }
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+    }
+    .metric-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.15); 
+        background: rgba(30, 41, 59, 0.7);
+    }
+    .metric-card h2 { margin: 0; font-size: 2.8rem; font-weight: 700; background: none; letter-spacing: -0.03em; line-height: 1.1; }
+    .metric-card p { margin: 0; color: #94a3b8 !important; font-size: 0.95rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 0.7rem; }
+    
+    /* Modern Alert Cards */
     .alert-card {
-        border-left: 4px solid; padding: 1rem; margin-bottom: 0.8rem;
-        border-radius: 0 8px 8px 0; background: #f8fafc; color: #0f172a;
-        line-height: 1.45;
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-left: 6px solid; 
+        padding: 1.4rem; 
+        margin-bottom: 1.2rem;
+        border-radius: 16px 20px 20px 16px;
+        color: #f1f5f9;
+        line-height: 1.6;
+        box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.15), 0 3px 7px -3px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        border-top: 1px solid rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
     }
-    .alert-card strong { color: #020617; }
+    .alert-card:hover {
+        transform: translateX(6px);
+        box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.2), 0 6px 14px -6px rgba(0, 0, 0, 0.15);
+        background: rgba(45, 60, 83, 0.7);
+    }
+    .alert-card strong { color: #f8fafc; font-weight: 700; letter-spacing: -0.01em; }
     .alert-card .severity-critical,
     .alert-card .severity-high,
     .alert-card .severity-medium,
     .alert-card .severity-low {
-        margin-left: 0.4rem;
+        margin-left: 0.6rem;
+        vertical-align: text-bottom;
     }
-    .alert-critical { border-color: #dc2626; }
-    .alert-high { border-color: #ea580c; }
-    .alert-medium { border-color: #facc15; }
-    .alert-low { border-color: #2563eb; }
-    .direction-spike { color: #dc2626; font-weight: 600; }
-    .direction-drop { color: #2563eb; font-weight: 600; }
+    .alert-critical { border-left-color: #ef4444; }
+    .alert-high { border-left-color: #f97316; }
+    .alert-medium { border-left-color: #facc15; }
+    .alert-low { border-left-color: #3b82f6; }
+    
+    /* Animated Direction indicators */
+    .direction-spike { color: #fca5a5 !important; font-weight: 700; background: rgba(239, 68, 68, 0.2); padding: 3px 8px; border-radius: 8px; }
+    .direction-drop { color: #93c5fd !important; font-weight: 700; background: rgba(59, 130, 246, 0.2); padding: 3px 8px; border-radius: 8px; }
+    
+    /* Playful primary buttons */
+    div[data-testid="stButton"] > button {
+        border-radius: 14px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255, 255, 255, 0.05);
+        color: #f8fafc;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    div[data-testid="stButton"] > button:hover {
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255,255,255,0.2);
+    }
+    
+    /* Input/Select boxes dark mode */
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+    [data-testid="stMultiSelect"] div[data-baseweb="select"] > div {
+        background-color: rgba(30, 41, 59, 0.7) !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        color: #f8fafc !important;
+    }
+
+    /* ── Phase 1A: Plotly transparent background ── */
+    [data-testid="stPlotlyChart"] iframe { background: transparent !important; }
+
+    /* ── Phase 2: Glassmorphic Dataframes ── */
+    [data-testid="stDataFrame"] {
+        background: rgba(30, 41, 59, 0.4) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+    [data-testid="stDataFrame"] .dvn-scroller { background: transparent !important; }
+
+    /* ── Phase 3A: Glassmorphic Expanders ── */
+    [data-testid="stExpander"] {
+        background: rgba(30, 41, 59, 0.35) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        margin-bottom: 0.8rem;
+        overflow: hidden;
+    }
+    [data-testid="stExpander"] summary { color: #f8fafc !important; font-weight: 600; }
+    [data-testid="stExpander"] summary:hover { background: rgba(255, 255, 255, 0.03); }
+    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* ── Phase 3B: Dark Pill Tabs ── */
+    [data-testid="stTabs"] [role="tablist"] {
+        background: rgba(15, 23, 42, 0.5);
+        border-radius: 12px; padding: 4px; gap: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    [data-testid="stTabs"] [role="tab"] {
+        color: #94a3b8 !important; border-radius: 8px;
+        border: none !important; background: transparent;
+        transition: all 0.2s ease;
+    }
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+        color: #f8fafc !important;
+        background: rgba(59, 130, 246, 0.2) !important;
+        font-weight: 600;
+    }
+    [data-testid="stTabs"] [data-baseweb="tab-highlight"],
+    [data-testid="stTabs"] [data-baseweb="tab-border"] { display: none; }
+
+    /* ── Phase 3C: Gradient Fade Dividers ── */
+    [data-testid="stMainBlockContainer"] hr {
+        border: none !important; height: 1px !important;
+        background: linear-gradient(90deg, rgba(255,255,255,0) 0%,
+            rgba(148,163,184,0.2) 20%, rgba(148,163,184,0.2) 80%,
+            rgba(255,255,255,0) 100%) !important;
+        margin: 1.5rem 0 !important;
+    }
+
+    /* ── Phase 3D: Dark File Uploader ── */
+    [data-testid="stFileUploader"] {
+        background: rgba(30, 41, 59, 0.4);
+        border: 2px dashed rgba(148, 163, 184, 0.2) !important;
+        border-radius: 16px; padding: 1rem;
+    }
+    [data-testid="stFileUploader"]:hover {
+        border-color: rgba(59, 130, 246, 0.4) !important;
+        background: rgba(30, 41, 59, 0.6);
+    }
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        background: transparent !important; border: none !important;
+    }
+
+    /* ── Phase 3E: Dark Text Inputs ── */
+    [data-testid="stTextInput"] input {
+        background: rgba(30, 41, 59, 0.7) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #f8fafc !important; border-radius: 10px;
+    }
+    [data-testid="stTextInput"] input:focus {
+        border-color: rgba(59, 130, 246, 0.5) !important;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+    }
+
+    /* ── Phase 4A: Glassmorphic Chat Bubbles ── */
+    [data-testid="stChatMessage"] {
+        background: rgba(30, 41, 59, 0.5) !important;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 16px; margin-bottom: 0.8rem;
+    }
+    [data-testid="stChatInput"] {
+        background: rgba(30, 41, 59, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 14px;
+    }
+    [data-testid="stChatInput"] textarea {
+        color: #f8fafc !important; background: transparent !important;
+    }
+
+    /* ── Phase 4B: Dark Status Messages ── */
+    [data-testid="stAlert"] {
+        background: rgba(30, 41, 59, 0.5) !important;
+        border-radius: 14px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    [data-testid="stAlert"] p { color: #e2e8f0 !important; }
+
+    /* ── Phase 4D: Gradient Progress Bars ── */
+    [data-testid="stProgress"] > div { background: rgba(30, 41, 59, 0.5) !important; border-radius: 8px; }
+    [data-testid="stProgress"] [role="progressbar"] > div {
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6) !important; border-radius: 8px;
+    }
+
+    /* ── Phase 4E: Sidebar Polish ── */
+    [data-testid="stSidebar"] [role="radiogroup"] label { transition: all 0.2s ease; }
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover {
+        color: #f8fafc !important;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+    }
+    [data-testid="stSidebar"] hr {
+        border: none !important; height: 1px !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -123,7 +357,7 @@ with st.sidebar:
     )
 
     st.divider()
-    st.caption("Built for Mistral Hackathon 2025")
+    st.caption("Built for Mistral Hackathon 2026")
     st.caption("Powered by **mistral-medium-latest**")
 
 
@@ -155,13 +389,48 @@ def render_validation(report: dict) -> None:
     )
 
 
-def metric_card(label: str, value, color: str = "#0f172a") -> str:
+def metric_card(label: str, value, color: str = "#0f172a", delta: str = "") -> str:
+    # Use gradient text mapping for beautiful shiny metrics
+    gradient = f"color: {color};"  # Fallback
+    if color == "#dc2626":
+        gradient = "background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+    elif color == "#ea580c":
+        gradient = "background: linear-gradient(135deg, #f97316 0%, #c2410c 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+    elif color == "#7c3aed":
+        gradient = "background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+    elif color == "#059669":
+        gradient = "background: linear-gradient(135deg, #10b981 0%, #047857 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+
+    delta_html = ""
+    if delta:
+        d = str(delta)
+        delta_color = "#ef4444" if d.startswith("+") else "#10b981" if d.startswith("-") else "#94a3b8"
+        delta_html = f'<p style="margin:0;color:{delta_color} !important;font-size:0.85rem;font-weight:600;padding-top:0.3rem;">{d}</p>'
+
     return f"""
     <div class="metric-card">
-        <h2 style="color: {color};">{value}</h2>
+        <h2 style="{gradient}">{value}</h2>
         <p>{label}</p>
+        {delta_html}
     </div>
     """
+
+
+# ---------------------------------------------------------------------------
+# Plotly dark theme layout (reused by all charts)
+# ---------------------------------------------------------------------------
+PLOTLY_DARK_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Inter, sans-serif", color="#cbd5e1"),
+    xaxis=dict(gridcolor="rgba(148,163,184,0.1)", zerolinecolor="rgba(148,163,184,0.15)",
+               tickfont=dict(color="#94a3b8"), title_font=dict(color="#94a3b8")),
+    yaxis=dict(gridcolor="rgba(148,163,184,0.1)", zerolinecolor="rgba(148,163,184,0.15)",
+               tickfont=dict(color="#94a3b8"), title_font=dict(color="#94a3b8")),
+    legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#cbd5e1")),
+    hoverlabel=dict(bgcolor="rgba(30,41,59,0.95)", font_color="#f8fafc",
+                    bordercolor="rgba(255,255,255,0.1)"),
+)
 
 
 def _get_alert_text(alert: dict) -> str:
@@ -358,7 +627,7 @@ if page == "Dashboard":
                     color="Severity", color_discrete_map=colors,
                     hole=0.45,
                 )
-                fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=280)
+                fig.update_layout(**PLOTLY_DARK_LAYOUT, margin=dict(t=20, b=20, l=20, r=20), height=280)
                 st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("Correlations Found")
@@ -398,7 +667,7 @@ if page == "Dashboard":
                 color_discrete_map={"critical": "#dc2626", "high": "#ea580c", "medium": "#facc15", "low": "#2563eb"},
                 labels={"week": "Week", "count": "Anomalies"},
             )
-            fig.update_layout(margin=dict(t=20, b=40), height=300, bargap=0.1)
+            fig.update_layout(**PLOTLY_DARK_LAYOUT, margin=dict(t=20, b=40), height=300, bargap=0.1)
             st.plotly_chart(fig, use_container_width=True)
 
 
@@ -488,9 +757,12 @@ elif page == "Upload & Analyze":
         st.subheader("Current Dataset")
         df = st.session_state.df
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Records", f"{len(df):,}")
-        c2.metric("Districts", df["district"].nunique())
-        c3.metric("Drugs", df["drug_generic_name"].nunique())
+        with c1:
+            st.markdown(metric_card("Total Records", f"{len(df):,}"), unsafe_allow_html=True)
+        with c2:
+            st.markdown(metric_card("Districts", df["district"].nunique(), "#7c3aed"), unsafe_allow_html=True)
+        with c3:
+            st.markdown(metric_card("Drugs", df["drug_generic_name"].nunique(), "#059669"), unsafe_allow_html=True)
         st.dataframe(df.head(10), use_container_width=True)
 
         # Data Quality Narrator — AI-powered remediation guidance
@@ -675,6 +947,7 @@ elif page == "Anomaly Explorer":
                     ))
 
                 fig.update_layout(
+                    **PLOTLY_DARK_LAYOUT,
                     title=f"{chart_drug} sales in {chart_district}",
                     xaxis_title="Week", yaxis_title="Units Sold",
                     height=400, margin=dict(t=40, b=40),
@@ -692,7 +965,7 @@ elif page == "Anomaly Explorer":
                     labels=dict(color="Anomaly Count"),
                     aspect="auto",
                 )
-                fig_heat.update_layout(height=500, margin=dict(t=20, b=20))
+                fig_heat.update_layout(**PLOTLY_DARK_LAYOUT, height=500, margin=dict(t=20, b=20))
                 st.plotly_chart(fig_heat, use_container_width=True)
 
 
@@ -798,8 +1071,10 @@ elif page == "Year-over-Year":
                     color_discrete_sequence=["#94a3b8", "#3b82f6"],
                 )
                 fig_yoy.update_layout(
+                    **{k: v for k, v in PLOTLY_DARK_LAYOUT.items() if k != "legend"},
                     margin=dict(t=20, b=40), height=420, xaxis_tickangle=-45,
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                                bgcolor="rgba(0,0,0,0)", font=dict(color="#cbd5e1")),
                 )
                 st.plotly_chart(fig_yoy, use_container_width=True)
 
@@ -838,7 +1113,7 @@ elif page == "Year-over-Year":
                 if not dist_merged.empty:
                     heat_pivot = dist_merged.pivot(index="district", columns="drug_generic_name", values="yoy_pct").fillna(0)
                     fig_heat = px.imshow(heat_pivot, color_continuous_scale="RdYlBu_r", color_continuous_midpoint=0, labels=dict(color="YoY Change %"), aspect="auto")
-                    fig_heat.update_layout(height=500, margin=dict(t=20, b=20))
+                    fig_heat.update_layout(**PLOTLY_DARK_LAYOUT, height=500, margin=dict(t=20, b=20))
                     st.plotly_chart(fig_heat, use_container_width=True)
 
             st.divider()
@@ -855,8 +1130,10 @@ elif page == "Year-over-Year":
                     profile_rows.append({"Drug": drug, "Month": month_names[m][:3], "Month_num": m, "Multiplier": get_seasonal_multiplier(drug, m)})
             profile_df = pd.DataFrame(profile_rows)
             fig_profile = px.line(profile_df, x="Month", y="Multiplier", color="Drug", markers=True, labels={"Multiplier": "Seasonal Multiplier"})
-            fig_profile.add_hline(y=1.0, line_dash="dash", line_color="gray", annotation_text="Baseline")
-            fig_profile.update_layout(margin=dict(t=20, b=40), height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            fig_profile.add_hline(y=1.0, line_dash="dash", line_color="rgba(148,163,184,0.4)", annotation_text="Baseline", annotation_font_color="#94a3b8")
+            fig_profile.update_layout(**{k: v for k, v in PLOTLY_DARK_LAYOUT.items() if k != "legend"}, margin=dict(t=20, b=40), height=350,
+                                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                                                  bgcolor="rgba(0,0,0,0)", font=dict(color="#cbd5e1")))
             st.plotly_chart(fig_profile, use_container_width=True)
 
 
@@ -891,7 +1168,7 @@ elif page == "Disease Map":
 
             severity_colors = {"critical": "red", "high": "orange", "medium": "beige", "low": "blue"}
 
-            m = folium.Map(location=[20.5, 78.9], zoom_start=5, tiles="CartoDB positron")
+            m = folium.Map(location=[20.5, 78.9], zoom_start=5, tiles="CartoDB dark_matter")
 
             for _, row in district_stats.iterrows():
                 dist_info = district_lookup.get(row["district"])
@@ -923,13 +1200,16 @@ elif page == "Disease Map":
 
             legend_html = """
             <div style="position:fixed; bottom:50px; left:50px; z-index:1000;
-                        background:white; padding:10px; border-radius:8px;
-                        border:1px solid #ccc; font-size:13px;">
-                <b>Severity</b><br>
-                <span style="color:red;">&#9679;</span> Critical<br>
-                <span style="color:orange;">&#9679;</span> High<br>
-                <span style="color:#c8b900;">&#9679;</span> Medium<br>
-                <span style="color:blue;">&#9679;</span> Low
+                        background:rgba(15,23,42,0.85); backdrop-filter:blur(12px);
+                        padding:12px 16px; border-radius:12px;
+                        border:1px solid rgba(255,255,255,0.1); font-size:13px;
+                        color:#e2e8f0; font-family:Inter,sans-serif;
+                        box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+                <b style="color:#f8fafc;">Severity</b><br>
+                <span style="color:#ef4444;">&#9679;</span> Critical<br>
+                <span style="color:#f97316;">&#9679;</span> High<br>
+                <span style="color:#facc15;">&#9679;</span> Medium<br>
+                <span style="color:#3b82f6;">&#9679;</span> Low
             </div>
             """
             m.get_root().html.add_child(folium.Element(legend_html))
@@ -1335,17 +1615,17 @@ elif page == "Scenario Simulator":
             cc1, cc2, cc3, cc4 = st.columns(4)
             with cc1:
                 delta = simulated["total_anomalies"] - original["total_anomalies"]
-                st.metric("Anomalies", simulated["total_anomalies"], delta=f"{delta:+d}")
+                st.markdown(metric_card("Anomalies", simulated["total_anomalies"], "#dc2626", f"{delta:+d}"), unsafe_allow_html=True)
             with cc2:
                 delta = simulated["districts_affected"] - original["districts_affected"]
-                st.metric("Districts Affected", simulated["districts_affected"], delta=f"{delta:+d}")
+                st.markdown(metric_card("Districts Affected", simulated["districts_affected"], "#ea580c", f"{delta:+d}"), unsafe_allow_html=True)
             with cc3:
                 delta = simulated["correlations_found"] - original["correlations_found"]
-                st.metric("Correlations", simulated["correlations_found"], delta=f"{delta:+d}")
+                st.markdown(metric_card("Correlations", simulated["correlations_found"], "#7c3aed", f"{delta:+d}"), unsafe_allow_html=True)
             with cc4:
                 orig_crit = original["severity_breakdown"].get("critical", 0)
                 sim_crit = simulated["severity_breakdown"].get("critical", 0)
-                st.metric("Critical Alerts", sim_crit, delta=f"{sim_crit - orig_crit:+d}")
+                st.markdown(metric_card("Critical Alerts", sim_crit, "#dc2626", f"{sim_crit - orig_crit:+d}"), unsafe_allow_html=True)
 
             # Severity comparison chart
             sev_data = []
@@ -1356,7 +1636,7 @@ elif page == "Scenario Simulator":
                 pd.DataFrame(sev_data), x="Severity", y="Count", color="Scenario",
                 barmode="group", color_discrete_sequence=["#94a3b8", "#dc2626"],
             )
-            fig_comp.update_layout(margin=dict(t=20, b=40), height=350)
+            fig_comp.update_layout(**PLOTLY_DARK_LAYOUT, margin=dict(t=20, b=40), height=350)
             st.plotly_chart(fig_comp, use_container_width=True)
 
             # New anomalies in simulated
@@ -1417,10 +1697,14 @@ elif page == "Evaluation":
         st.subheader("Overall Detection Performance")
         overall = eval_results["overall"]
         oc1, oc2, oc3, oc4 = st.columns(4)
-        oc1.metric("Precision", f"{overall['precision']:.1%}")
-        oc2.metric("Recall", f"{overall['recall']:.1%}")
-        oc3.metric("F1 Score", f"{overall['f1']:.1%}")
-        oc4.metric("Total Detected", overall["total_detected"])
+        with oc1:
+            st.markdown(metric_card("Precision", f"{overall['precision']:.1%}", "#059669"), unsafe_allow_html=True)
+        with oc2:
+            st.markdown(metric_card("Recall", f"{overall['recall']:.1%}", "#7c3aed"), unsafe_allow_html=True)
+        with oc3:
+            st.markdown(metric_card("F1 Score", f"{overall['f1']:.1%}", "#ea580c"), unsafe_allow_html=True)
+        with oc4:
+            st.markdown(metric_card("Total Detected", overall["total_detected"], "#dc2626"), unsafe_allow_html=True)
 
         st.divider()
 
@@ -1435,9 +1719,12 @@ elif page == "Evaluation":
                 st.caption(event_result["scenario"])
 
                 ec1, ec2, ec3 = st.columns(3)
-                ec1.metric("Expected Signals", event_result["expected_signals"])
-                ec2.metric("Detected Signals", event_result["detected_signals"])
-                ec3.metric("True Positives", event_result["true_positives"])
+                with ec1:
+                    st.markdown(metric_card("Expected Signals", event_result["expected_signals"]), unsafe_allow_html=True)
+                with ec2:
+                    st.markdown(metric_card("Detected Signals", event_result["detected_signals"], "#7c3aed"), unsafe_allow_html=True)
+                with ec3:
+                    st.markdown(metric_card("True Positives", event_result["true_positives"], "#059669"), unsafe_allow_html=True)
 
                 if event_result["precision"] >= 0.8 and event_result["recall"] >= 0.8:
                     st.success(f"Detection quality: Excellent (F1 = {event_result['f1']:.0%})")
@@ -1476,5 +1763,5 @@ elif page == "Evaluation":
             labels={"value": "Signal Count", "variable": "Type"},
             color_discrete_sequence=["#94a3b8", "#3b82f6", "#059669"],
         )
-        fig_eval.update_layout(margin=dict(t=20, b=40), height=350)
+        fig_eval.update_layout(**PLOTLY_DARK_LAYOUT, margin=dict(t=20, b=40), height=350)
         st.plotly_chart(fig_eval, use_container_width=True)

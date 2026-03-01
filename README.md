@@ -233,6 +233,20 @@ To upload your own data, prepare a CSV with these columns:
 
 ---
 
+## Citation
+
+The Pharmaceutical Signal Framework (PSF) is described in:
+
+> Vignesh Govindhan, "Pharmaceutical Point-of-Sale Data as a Real-Time Epidemiological Surveillance Proxy: Bypassing the Human-Mediated Reporting Bottleneck in Public Health Systems," SSRN Working Paper, 2026. DOI: [https://papers.ssrn.com/abstract=6322599](https://papers.ssrn.com/abstract=6322599). Zenodo: [https://doi.org/10.5281/zenodo.18825546](https://doi.org/10.5281/zenodo.18825546)
+
+If you build on this framework, please cite the paper.
+
+---
+
 ## License
+
+Copyright 2026 Vignesh Govindhan.
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
 Built for the Mistral AI Hackathon 2026.

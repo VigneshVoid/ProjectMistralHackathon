@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: "Pharma Surveillance: AI-Powered Epidemiological Intelligence from Pharmacy Sales Data"
+message: "If you use this software or build on the Pharmaceutical Signal Framework, please cite the paper below."
+type: software
+authors:
+  - family-names: Govindhan
+    given-names: Vignesh
+    email: murugaviki@gmail.com
+repository-code: "https://github.com/VigneshVoid/ProjectMistralHackathon"
+license: Apache-2.0
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.18825546"
+    description: "Zenodo archive of the software"
+  - type: url
+    value: "https://papers.ssrn.com/abstract=6322599"
+    description: "SSRN preprint of the accompanying paper"
+preferred-citation:
+  type: article
+  title: "Pharmaceutical Point-of-Sale Data as a Real-Time Epidemiological Surveillance Proxy: Bypassing the Human-Mediated Reporting Bottleneck in Public Health Systems"
+  authors:
+    - family-names: Govindhan
+      given-names: Vignesh
+  year: 2026
+  url: "https://papers.ssrn.com/abstract=6322599"
+  doi: "10.5281/zenodo.18825546"
+  journal: "SSRN Working Paper"

@@ -2,13 +2,13 @@
 Pipeline orchestrator: data → detect → correlate → interpret → alert.
 
 This module ties together the detection engine, Mistral agent, and correlation logic.
-Uses ThreadPoolExecutor for parallel Mistral API calls.
+Uses sequential API calls with delays to respect free-tier rate limits.
 """
 
 import time
+from typing import Callable, Optional
 
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.core.detection import run_all_detections, aggregate_weekly
 from app.core.mappings import check_correlations
@@ -55,8 +55,11 @@ def _compute_district_risk(anomalies: list[dict], correlations: list[dict]) -> l
     return sorted(district_scores.values(), key=lambda x: x["risk_score"], reverse=True)
 
 
-def _safe_interpret(anomaly: dict, delay: float = 0) -> dict:
-    """Interpret a single anomaly, catching errors."""
+def _safe_interpret(anomaly: dict, delay: float = 2.0) -> dict:
+    """Interpret a single anomaly, catching errors.
+
+    Delay is applied BEFORE the API call to space out requests.
+    """
     if delay > 0:
         time.sleep(delay)
     try:
@@ -69,8 +72,11 @@ def _safe_interpret(anomaly: dict, delay: float = 0) -> dict:
         }
 
 
-def _safe_alert(district: str, state: str, high_severity: list[dict], delay: float = 0) -> dict:
-    """Generate an alert for a district, catching errors."""
+def _safe_alert(district: str, state: str, high_severity: list[dict], delay: float = 2.0) -> dict:
+    """Generate an alert for a district, catching errors.
+
+    Delay is applied BEFORE the API call to space out requests.
+    """
     if delay > 0:
         time.sleep(delay)
     try:
@@ -92,18 +98,35 @@ def _safe_alert(district: str, state: str, high_severity: list[dict], delay: flo
         }
 
 
-def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bool = False) -> dict:
+def run_pipeline(
+    df: pd.DataFrame,
+    use_mistral: bool = True,
+    seasonal_adjust: bool = False,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> dict:
     """Run the full surveillance pipeline on pharmacy sales data.
 
     Args:
         df: Raw pharmacy sales DataFrame.
         use_mistral: Whether to call Mistral for interpretations.
         seasonal_adjust: If True, exclude expected seasonal spikes from anomaly detection.
+        progress_callback: Optional callable(step, total_steps, message) for UI progress.
 
     Returns:
         Dict with keys: anomalies, correlations, alerts, insights, weekly_data, summary.
     """
+    # Compute total steps for progress reporting
+    # Base steps: validate(1) + detect(2) + correlate(3) + aggregate(4) + summary(5)
+    # Mistral steps added dynamically below
+    _MAX_INTERPRETATIONS = 5
+    _MAX_ALERT_DISTRICTS = 10
+
+    def _progress(step: int, total: int, msg: str):
+        if progress_callback:
+            progress_callback(step, total, msg)
+
     # Step 0: Validate and clean input
+    _progress(1, 5, "Validating data...")
     clean_df, validation_report = validate_and_clean_sales_data(df)
     if clean_df.empty:
         return {
@@ -125,10 +148,12 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bo
         }
 
     # Step 1: Detect anomalies
+    _progress(2, 5, "Detecting anomalies...")
     anomalies = run_all_detections(clean_df, seasonal_adjust=seasonal_adjust)
     anomaly_dicts = [a.to_dict() for a in anomalies]
 
     # Step 2: Group anomalies by district and check correlations
+    _progress(3, 5, "Checking correlations...")
     district_anomalies: dict[str, list[dict]] = {}
     for a in anomaly_dicts:
         district_anomalies.setdefault(a["district"], []).append(a)
@@ -144,28 +169,47 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bo
                 **rule,
             })
 
-    # Step 3: Generate Mistral interpretations (parallel execution)
+    # Step 3: Mistral AI — sequential with rate-limit-safe delays
     insights = []
     alerts = []
 
     if use_mistral and anomaly_dicts:
-        # Interpret top anomalies (staggered to avoid rate limits)
-        top_anomalies = [a for a in anomaly_dicts if a["severity"] in ("critical", "high")][:10]
+        # Select top anomalies (reduced from 10 to 5 for rate limit safety)
+        top_anomalies = [a for a in anomaly_dicts if a["severity"] in ("critical", "high")][:_MAX_INTERPRETATIONS]
+        num_interpretations = len(top_anomalies)
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            # Submit interpretation tasks with staggered delays
-            interpret_futures = {
-                executor.submit(_safe_interpret, a, i * 0.5): a
-                for i, a in enumerate(top_anomalies)
-            }
-            for future in as_completed(interpret_futures):
-                insights.append(future.result())
-
-        # Generate alerts sequentially to respect rate limits
+        # Select top districts by high-severity count (reduced to max 10)
+        district_severity_counts = []
         for district, dist_anomalies in district_anomalies.items():
             high_severity = [a for a in dist_anomalies if a["severity"] in ("critical", "high")]
             if high_severity:
-                alerts.append(_safe_alert(district, high_severity[0]["state"], high_severity, delay=0.3))
+                district_severity_counts.append((district, dist_anomalies, high_severity))
+        district_severity_counts.sort(key=lambda x: len(x[2]), reverse=True)
+        top_districts = district_severity_counts[:_MAX_ALERT_DISTRICTS]
+        num_alerts = len(top_districts)
+
+        total_steps = 3 + num_interpretations + num_alerts + 2  # +2 for aggregate + summary
+
+        # Interpret anomalies — fully sequential with 2s delays
+        for i, anomaly in enumerate(top_anomalies):
+            _progress(4 + i, total_steps, f"Interpreting anomaly {i + 1}/{num_interpretations}...")
+            insights.append(_safe_interpret(anomaly, delay=2.0 if i > 0 else 0.5))
+
+        # Generate alerts — fully sequential with 2s delays
+        for i, (district, dist_anomalies, high_severity) in enumerate(top_districts):
+            _progress(
+                4 + num_interpretations + i,
+                total_steps,
+                f"Generating alert {i + 1}/{num_alerts}...",
+            )
+            alerts.append(
+                _safe_alert(district, high_severity[0]["state"], high_severity, delay=2.0 if i > 0 else 0.5)
+            )
+
+        _progress(total_steps - 1, total_steps, "Building summary...")
+    else:
+        total_steps = 5
+        _progress(4, total_steps, "Aggregating weekly data...")
 
     # Step 4: Aggregate weekly data for charts
     weekly = aggregate_weekly(clean_df)
@@ -187,6 +231,8 @@ def run_pipeline(df: pd.DataFrame, use_mistral: bool = True, seasonal_adjust: bo
         "alerts_generated": len(alerts),
         "validation": validation_report,
     }
+
+    _progress(total_steps, total_steps, "Pipeline complete!")
 
     return {
         "anomalies": anomaly_dicts,

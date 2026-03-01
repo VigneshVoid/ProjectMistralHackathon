@@ -233,9 +233,20 @@ if page == "Dashboard":
                 with st.spinner("Generating 18 months of synthetic pharmacy data (2023-2024)..."):
                     df = generate()
                     st.session_state.df = df
-                with st.spinner("Running anomaly detection pipeline..."):
-                    results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
-                    st.session_state.pipeline_results = results
+                progress_bar = st.progress(0, text="Starting pipeline...")
+                status_text = st.empty()
+
+                def _on_progress(step, total, msg):
+                    progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
+                    status_text.caption(f"Step {step}/{total}: {msg}")
+
+                results = run_pipeline(
+                    df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+                    progress_callback=_on_progress,
+                )
+                st.session_state.pipeline_results = results
+                progress_bar.empty()
+                status_text.empty()
                 st.rerun()
     else:
         results = st.session_state.pipeline_results
@@ -412,9 +423,20 @@ elif page == "Upload & Analyze":
             st.dataframe(df.head(20), use_container_width=True)
 
             if st.button("Run Analysis", type="primary"):
-                with st.spinner("Running anomaly detection pipeline..."):
-                    results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
-                    st.session_state.pipeline_results = results
+                progress_bar = st.progress(0, text="Starting pipeline...")
+                status_text = st.empty()
+
+                def _on_progress(step, total, msg):
+                    progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
+                    status_text.caption(f"Step {step}/{total}: {msg}")
+
+                results = run_pipeline(
+                    df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+                    progress_callback=_on_progress,
+                )
+                st.session_state.pipeline_results = results
+                progress_bar.empty()
+                status_text.empty()
                 st.success(f"Found {results['summary']['total_anomalies']} anomalies across {results['summary']['districts_affected']} districts")
                 render_validation(results["summary"].get("validation", {}))
                 st.rerun()
@@ -439,9 +461,20 @@ elif page == "Upload & Analyze":
                 st.session_state.df = df
             st.success(f"Generated {len(df):,} pharmacy sales records")
 
-            with st.spinner("Running anomaly detection pipeline..."):
-                results = run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
-                st.session_state.pipeline_results = results
+            progress_bar = st.progress(0, text="Starting pipeline...")
+            status_text = st.empty()
+
+            def _on_progress(step, total, msg):
+                progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
+                status_text.caption(f"Step {step}/{total}: {msg}")
+
+            results = run_pipeline(
+                df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+                progress_callback=_on_progress,
+            )
+            st.session_state.pipeline_results = results
+            progress_bar.empty()
+            status_text.empty()
             st.success(
                 f"Analysis complete: {results['summary']['total_anomalies']} anomalies, "
                 f"{results['summary']['districts_affected']} districts affected"

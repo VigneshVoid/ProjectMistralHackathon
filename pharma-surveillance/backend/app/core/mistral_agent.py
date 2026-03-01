@@ -11,13 +11,23 @@ Showcases 6 Mistral SDK features:
 """
 
 import json
+import time
+import logging
 from typing import Generator
 
 from pydantic import BaseModel
-from mistralai import Mistral
+from mistralai import Mistral, SDKError
 
 from app.config import settings
 from app.core.mappings import DRUG_CONDITION_MAP, CORRELATION_RULES
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Retry configuration for rate-limited (429) requests
+# ---------------------------------------------------------------------------
+_MAX_RETRIES = 4
+_BASE_DELAY = 2  # seconds — doubles each retry: 2, 4, 8, 16
 
 # ---------------------------------------------------------------------------
 # Default model — upgraded from mistral-small-latest
@@ -133,54 +143,96 @@ def _anomaly_user_content(anomaly: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Core call helpers
+# Core call helpers (with automatic retry on 429 rate-limit errors)
 # ---------------------------------------------------------------------------
 def _call_mistral(system_prompt: str, user_content: str, model: str = DEFAULT_MODEL) -> str:
-    """Make a Mistral API call and return the response text."""
+    """Make a Mistral API call and return the response text.
+
+    Retries up to _MAX_RETRIES times on 429 rate-limit errors with
+    exponential backoff (2s, 4s, 8s, 16s).
+    """
     client = _get_client()
-    response = client.chat.complete(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.3,
-        max_tokens=1024,
-    )
-    return response.choices[0].message.content
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.chat.complete(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            return response.choices[0].message.content
+        except SDKError as e:
+            if e.status_code == 429 and attempt < _MAX_RETRIES:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning("Rate limited (429). Retry %d/%d in %ds...", attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+            else:
+                raise
 
 
 def _call_mistral_structured(system_prompt: str, user_content: str, response_model, model: str = DEFAULT_MODEL):
-    """Make a Mistral API call with structured output (Pydantic model)."""
+    """Make a Mistral API call with structured output (Pydantic model).
+
+    Retries up to _MAX_RETRIES times on 429 rate-limit errors.
+    """
     client = _get_client()
-    response = client.chat.complete(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.3,
-        max_tokens=1024,
-        response_format={
-            "type": "json_object",
-        },
-    )
-    raw = response.choices[0].message.content
-    return response_model.model_validate_json(raw)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.chat.complete(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content
+            return response_model.model_validate_json(raw)
+        except SDKError as e:
+            if e.status_code == 429 and attempt < _MAX_RETRIES:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning("Rate limited (429). Retry %d/%d in %ds...", attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+            else:
+                raise
 
 
 def _stream_mistral(system_prompt: str, user_content: str, model: str = DEFAULT_MODEL) -> Generator[str, None, None]:
-    """Stream a Mistral response token-by-token."""
+    """Stream a Mistral response token-by-token.
+
+    Retries the initial stream creation on 429 rate-limit errors.
+    """
     client = _get_client()
-    stream = client.chat.stream(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.3,
-        max_tokens=1024,
-    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+    stream = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            stream = client.chat.stream(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            break
+        except SDKError as e:
+            if e.status_code == 429 and attempt < _MAX_RETRIES:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning("Rate limited (429). Retry %d/%d in %ds...", attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+            else:
+                raise
+    if stream is None:
+        return
     for chunk in stream:
         content = chunk.data.choices[0].delta.content
         if content:
@@ -612,14 +664,26 @@ def query_assistant(user_query: str, chat_history: list[dict]) -> tuple[str, lis
     messages.extend(chat_history)
     messages.append({"role": "user", "content": user_query})
 
-    response = client.chat.complete(
-        model=DEFAULT_MODEL,
-        messages=messages,
-        tools=QUERY_TOOLS,
-        tool_choice="auto",
-        temperature=0.3,
-        max_tokens=1024,
-    )
+    # Retry on rate limit
+    response = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.chat.complete(
+                model=DEFAULT_MODEL,
+                messages=messages,
+                tools=QUERY_TOOLS,
+                tool_choice="auto",
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            break
+        except SDKError as e:
+            if e.status_code == 429 and attempt < _MAX_RETRIES:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning("Rate limited (429). Retry %d/%d in %ds...", attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+            else:
+                raise
 
     message = response.choices[0].message
 
@@ -669,10 +733,20 @@ def query_assistant_followup(
             "tool_call_id": tr["id"],
         })
 
-    response = client.chat.complete(
-        model=DEFAULT_MODEL,
-        messages=messages,
-        temperature=0.3,
-        max_tokens=1024,
-    )
-    return response.choices[0].message.content
+    # Retry on rate limit
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = client.chat.complete(
+                model=DEFAULT_MODEL,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            return response.choices[0].message.content
+        except SDKError as e:
+            if e.status_code == 429 and attempt < _MAX_RETRIES:
+                delay = _BASE_DELAY * (2 ** attempt)
+                logger.warning("Rate limited (429). Retry %d/%d in %ds...", attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+            else:
+                raise

@@ -153,7 +153,7 @@ if page == "Dashboard":
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Generate Synthetic Data & Analyze", type="primary", use_container_width=True):
-                with st.spinner("Generating 18 months of synthetic pharmacy data (2023-2024)..."):
+                with st.spinner("Generating 18 months of global pharmacy data (India, USA, Europe)..."):
                     df = generate()
                     st.session_state.df = df
                 with st.spinner("Running anomaly detection pipeline..."):
@@ -279,14 +279,26 @@ elif page == "Upload & Analyze":
 
     with tab2:
         st.markdown(
-            "Generate 18 months (Jan 2023 – Jun 2024) of synthetic pharmacy sales data across 20 Indian districts "
-            "with **seasonal variation** and **4 injected anomaly scenarios** in 2024:"
+            "Generate 18 months (Jan 2023 – Jun 2024) of synthetic pharmacy sales data across "
+            "**44 districts** in **India, USA, and Europe** "
+            "with **seasonal variation** and **10 injected anomaly scenarios** in 2024:"
         )
         st.markdown("""
-        1. **Delhi Respiratory Spike** (Weeks 18-20 of 2024) — Air pollution event
-        2. **Chennai Waterborne Outbreak** (Week 12 of 2024) — Water contamination
-        3. **Pune Flu Cluster** (Weeks 8-10 of 2024) — Influenza wave
-        4. **Vizag Thyroid Anomaly** (Months 3-6 of 2024) — Industrial pollution
+        **India:**
+        1. **Delhi Respiratory Spike** (Weeks 18-20) — Air pollution event
+        2. **Chennai Waterborne Outbreak** (Week 12) — Water contamination
+        3. **Pune Flu Cluster** (Weeks 8-10) — Influenza wave
+        4. **Vizag Thyroid Anomaly** (Months 3-6) — Industrial pollution
+
+        **USA:**
+        5. **NYC Flu Outbreak** (Weeks 4-6) — Severe winter influenza
+        6. **Houston GI Outbreak** (Weeks 14-15) — Post-flood water contamination
+        7. **LA Respiratory Spike** (Weeks 20-22) — Wildfire smoke event
+
+        **Europe:**
+        8. **London-Paris Flu Wave** (Weeks 6-8) — Cross-border influenza
+        9. **Berlin-Munich Respiratory Cluster** (Weeks 10-12) — Industrial pollution
+        10. **Madrid-Rome Diabetes Trend** (Weeks 5-20) — Post-holiday metabolic rise
 
         2023 data serves as a clean seasonal baseline for Year-over-Year comparison.
         """)
@@ -732,6 +744,23 @@ elif page == "Disease Map":
                 .reset_index()
             )
 
+            # Add country info to district_stats for filtering
+            district_stats["country"] = district_stats["district"].apply(
+                lambda d: district_lookup.get(d, {}).get("country", "Unknown")
+            )
+
+            # Region filter
+            available_regions = sorted(district_stats["country"].unique())
+            map_col1, map_col2 = st.columns([1, 3])
+            with map_col1:
+                sel_region = st.selectbox(
+                    "Region",
+                    ["All Regions"] + available_regions,
+                )
+
+            if sel_region != "All Regions":
+                district_stats = district_stats[district_stats["country"] == sel_region]
+
             # Color by severity
             severity_colors = {
                 "critical": "red",
@@ -740,8 +769,36 @@ elif page == "Disease Map":
                 "low": "blue",
             }
 
-            # Create folium map centered on India
-            m = folium.Map(location=[20.5, 78.9], zoom_start=5, tiles="CartoDB positron")
+            # Compute map center and zoom from the districts being shown
+            visible_coords = []
+            for _, row in district_stats.iterrows():
+                dist_info = district_lookup.get(row["district"])
+                if dist_info:
+                    visible_coords.append((dist_info["lat"], dist_info["lon"]))
+
+            if visible_coords:
+                lats = [c[0] for c in visible_coords]
+                lons = [c[1] for c in visible_coords]
+                center_lat = (min(lats) + max(lats)) / 2
+                center_lon = (min(lons) + max(lons)) / 2
+                # Estimate zoom from span
+                lat_span = max(lats) - min(lats)
+                lon_span = max(lons) - min(lons)
+                span = max(lat_span, lon_span, 1)
+                if span > 100:
+                    zoom = 2
+                elif span > 40:
+                    zoom = 3
+                elif span > 20:
+                    zoom = 4
+                elif span > 10:
+                    zoom = 5
+                else:
+                    zoom = 6
+            else:
+                center_lat, center_lon, zoom = 20.0, 0.0, 2
+
+            m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom, tiles="CartoDB positron")
 
             for _, row in district_stats.iterrows():
                 dist_info = district_lookup.get(row["district"])
@@ -750,9 +807,11 @@ elif page == "Disease Map":
 
                 color = severity_colors.get(row["max_severity"], "gray")
                 radius = max(8, row["anomaly_count"] * 2)
+                country = dist_info.get("country", "")
 
                 popup_html = (
-                    f"<b>{row['district']}</b><br>"
+                    f"<b>{row['district']}</b> ({country})<br>"
+                    f"State/Region: {dist_info.get('state', '')}<br>"
                     f"Anomalies: {row['anomaly_count']}<br>"
                     f"Severity: {row['max_severity'].upper()}<br>"
                     f"Drugs: {row['drugs']}<br>"

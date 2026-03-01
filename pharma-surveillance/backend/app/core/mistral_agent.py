@@ -115,6 +115,20 @@ class SimulationExplanation(BaseModel):
     monitoring_recommendations: list[str]
 
 
+class DataQualityNarration(BaseModel):
+    summary: str
+    issues_found: list[str]
+    remediation_steps: list[str]
+    data_entry_tips: list[str]
+    risk_assessment: str
+
+
+class PublicCommunications(BaseModel):
+    technical_memo: str
+    citizen_advisory: str
+    press_summary: str
+
+
 # ---------------------------------------------------------------------------
 # Context helpers
 # ---------------------------------------------------------------------------
@@ -556,7 +570,70 @@ def explain_simulation(original_summary: dict, simulated_summary: dict, scenario
 
 
 # ---------------------------------------------------------------------------
-# 10. Natural language query assistant (function calling)
+# 10. Data quality anomaly narrator (structured output)
+# ---------------------------------------------------------------------------
+def narrate_data_quality(validation_report: dict) -> dict:
+    """Auto-generate remediation guidance from data quality issues.
+
+    Takes a validation report dict and uses Mistral to produce
+    actionable guidance for data-entry teams.
+    """
+    system_prompt = (
+        "You are a data quality specialist for India's pharmacy surveillance system. "
+        "Given a data validation report, generate clear remediation guidance for "
+        "the data-entry teams at district pharmacies. "
+        "Return a JSON object with these exact fields:\n"
+        "- summary (string): one-sentence overview of data health\n"
+        "- issues_found (list of strings): specific issues detected\n"
+        "- remediation_steps (list of strings): actionable steps to fix each issue\n"
+        "- data_entry_tips (list of strings): preventive tips for pharmacy staff\n"
+        "- risk_assessment (string): impact on surveillance accuracy if unfixed\n"
+    )
+    user_content = (
+        f"Data Validation Report:\n"
+        f"- Rows submitted: {validation_report.get('rows_in', 0)}\n"
+        f"- Rows accepted: {validation_report.get('rows_out', 0)}\n"
+        f"- Rows dropped: {validation_report.get('rows_dropped', 0)}\n"
+        f"- Errors: {json.dumps(validation_report.get('errors', []))}\n"
+        f"- Warnings: {json.dumps(validation_report.get('warnings', []))}\n"
+    )
+    result = _call_mistral_structured(system_prompt, user_content, DataQualityNarration)
+    return result.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# 11. Public communication drafts (structured output)
+# ---------------------------------------------------------------------------
+def draft_public_communications(alert_text: str, district: str, severity: str) -> dict:
+    """Generate audience-specific communications from a public health alert.
+
+    Produces three versions:
+    - Technical memo for health officers
+    - Short advisory for citizens
+    - Press-ready neutral summary
+    """
+    system_prompt = (
+        "You are a public health communications specialist for India. "
+        "Given a public health alert, generate three audience-specific versions. "
+        "Return a JSON object with these exact fields:\n"
+        "- technical_memo (string): detailed memo for district health officers with "
+        "medical terminology, data points, and protocol references (200-300 words)\n"
+        "- citizen_advisory (string): clear, simple advisory for the general public "
+        "with practical health tips and reassurance, no jargon (100-150 words)\n"
+        "- press_summary (string): neutral, fact-based summary suitable for media "
+        "with balanced tone and official framing (100-150 words)\n"
+    )
+    user_content = (
+        f"District: {district}\n"
+        f"Severity: {severity}\n\n"
+        f"Alert Content:\n{alert_text}"
+    )
+    result = _call_mistral_structured(system_prompt, user_content, PublicCommunications)
+    return result.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# 12. Natural language query assistant (function calling)
 # ---------------------------------------------------------------------------
 QUERY_TOOLS = [
     {

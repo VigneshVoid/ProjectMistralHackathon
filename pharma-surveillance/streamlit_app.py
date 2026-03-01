@@ -11,6 +11,7 @@ multilingual generation, chat.complete, and model upgrade to mistral-medium-late
 import sys
 import html
 import json
+import math
 from pathlib import Path
 
 # Add backend to path
@@ -492,6 +493,34 @@ elif page == "Upload & Analyze":
         c3.metric("Drugs", df["drug_generic_name"].nunique())
         st.dataframe(df.head(10), use_container_width=True)
 
+        # Data Quality Narrator — AI-powered remediation guidance
+        if st.session_state.pipeline_results and use_mistral:
+            validation_report = st.session_state.pipeline_results.get("summary", {}).get("validation", {})
+            if validation_report and (validation_report.get("warnings") or validation_report.get("rows_dropped", 0) > 0):
+                st.divider()
+                st.subheader("AI Data Quality Narrator")
+                if st.button("Generate Remediation Guidance", type="secondary"):
+                    with st.spinner("Analyzing data quality issues with Mistral AI..."):
+                        from app.core.mistral_agent import narrate_data_quality
+                        narration = narrate_data_quality(validation_report)
+                    if "error" not in narration:
+                        st.markdown(f"**Summary:** {html.escape(narration['summary'])}")
+                        if narration.get("issues_found"):
+                            st.markdown("**Issues Found:**")
+                            for issue in narration["issues_found"]:
+                                st.markdown(f"- {html.escape(issue)}")
+                        if narration.get("remediation_steps"):
+                            st.markdown("**Remediation Steps:**")
+                            for i, step in enumerate(narration["remediation_steps"], 1):
+                                st.markdown(f"{i}. {html.escape(step)}")
+                        if narration.get("data_entry_tips"):
+                            with st.expander("Preventive Tips for Pharmacy Staff"):
+                                for tip in narration["data_entry_tips"]:
+                                    st.markdown(f"- {html.escape(tip)}")
+                        st.info(f"**Risk Assessment:** {html.escape(narration['risk_assessment'])}")
+                    else:
+                        st.error(narration["error"])
+
 
 # ---------------------------------------------------------------------------
 # PAGE: Anomaly Explorer
@@ -870,7 +899,8 @@ elif page == "Disease Map":
                     continue
 
                 color = severity_colors.get(row["max_severity"], "gray")
-                radius = max(8, row["anomaly_count"] * 2)
+                # Scale radius with sqrt so markers stay readable (8-30px range)
+                radius = max(8, min(30, 8 + math.sqrt(row["anomaly_count"]) * 1.5))
 
                 popup_html = (
                     f"<b>{html.escape(row['district'])}</b><br>"
@@ -1024,6 +1054,44 @@ elif page == "Alerts & Insights":
                                     st.session_state.translations[cache_key] = translated
                             st.markdown(f"**{lang_choice} Translation:**")
                             st.markdown(st.session_state.translations[cache_key])
+
+                        # Public communication drafts
+                        comms_key = f"comms_{alert_key}"
+                        if st.button("Draft Public Communications", key=f"comms_btn_{alert_key}"):
+                            with st.spinner("Generating audience-specific drafts..."):
+                                from app.core.mistral_agent import draft_public_communications
+                                alert_text = _get_alert_text(alert)
+                                comms = draft_public_communications(
+                                    alert_text,
+                                    district=alert.get("district", "Unknown"),
+                                    severity=alert.get("max_severity", "unknown"),
+                                )
+                                st.session_state[comms_key] = comms
+
+                        if comms_key in st.session_state:
+                            comms = st.session_state[comms_key]
+                            tab_tech, tab_citizen, tab_press = st.tabs([
+                                "Technical Memo", "Citizen Advisory", "Press Summary"
+                            ])
+                            with tab_tech:
+                                st.markdown(comms.get("technical_memo", ""))
+                            with tab_citizen:
+                                st.markdown(comms.get("citizen_advisory", ""))
+                            with tab_press:
+                                st.markdown(comms.get("press_summary", ""))
+                            # Download all drafts
+                            combined = (
+                                "# Technical Memo\n\n" + comms.get("technical_memo", "") +
+                                "\n\n---\n\n# Citizen Advisory\n\n" + comms.get("citizen_advisory", "") +
+                                "\n\n---\n\n# Press Summary\n\n" + comms.get("press_summary", "")
+                            )
+                            st.download_button(
+                                "Download All Drafts (MD)",
+                                combined,
+                                file_name=f"communications_{alert.get('district', 'alert')}.md",
+                                mime="text/markdown",
+                                key=f"dl_comms_{alert_key}",
+                            )
 
             # Alert lifecycle summary
             st.divider()

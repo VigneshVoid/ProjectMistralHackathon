@@ -15,18 +15,20 @@ This system:
 - **Detects** anomalies using 4 statistical methods (Z-Score, IQR, Percentage Spike, EWMA)
 - **Interprets** findings with Mistral AI structured output and streaming analysis
 - **Alerts** health officers with severity-ranked, actionable alerts in multiple languages
+- **Narrates** data quality issues with AI-powered remediation guidance for data entry teams
+- **Drafts** audience-specific public communications (technical memo, citizen advisory, press summary)
 - **Enables** natural language querying, what-if simulations, and differential diagnosis
 
 ---
 
 ## Mistral AI Features Showcased
 
-This project showcases **6 distinct Mistral SDK capabilities** through 15 AI-powered functions:
+This project showcases **6 distinct Mistral SDK capabilities** through 17 AI-powered functions:
 
 | # | Mistral Feature | How It's Used | Functions |
 |---|----------------|---------------|-----------|
 | 1 | **`chat.complete()`** | Batch anomaly interpretation and alert generation during pipeline execution | `interpret_anomaly_text()`, `generate_alert_text()`, `correlate_signals()`, `localize_alert()` |
-| 2 | **Structured Output** (`response_format: json_object`) | Returns validated Pydantic models for alerts, briefings, diagnosis, interventions, and clustering | `interpret_anomaly()`, `generate_alert()`, `generate_district_briefing()`, `differential_diagnosis()`, `plan_interventions()`, `cluster_district_patterns()`, `explain_simulation()` |
+| 2 | **Structured Output** (`response_format: json_object`) | Returns validated Pydantic models for alerts, briefings, diagnosis, interventions, clustering, data quality narration, and public communications | `interpret_anomaly()`, `generate_alert()`, `generate_district_briefing()`, `differential_diagnosis()`, `plan_interventions()`, `cluster_district_patterns()`, `explain_simulation()`, `narrate_data_quality()`, `draft_public_communications()` |
 | 3 | **Streaming** (`chat.stream()`) | Token-by-token live rendering for on-demand analysis in the Alerts page | `interpret_anomaly_stream()`, `correlate_signals_stream()` |
 | 4 | **Function Calling** (`tools` + `tool_choice`) | Natural language query assistant that calls data filtering tools automatically | `query_assistant()` with tools: `filter_anomalies`, `get_district_risk`, `get_correlations`, `get_summary` |
 | 5 | **Multilingual Generation** | Translates alerts into Hindi, Tamil, Telugu, Kannada, Bengali, Gujarati, Malayalam | `localize_alert()` |
@@ -43,6 +45,8 @@ All structured outputs are validated against strict schemas:
 - `InterventionPlan` - immediate (24h) + short-term (7d) actions, resources needed
 - `ClusterAnalysis` - regional event detection with confidence and evidence
 - `SimulationExplanation` - impact summary, key changes, new risk areas
+- `DataQualityNarration` - AI-powered data quality summary, issues found, remediation steps, risk assessment
+- `PublicCommunications` - audience-specific drafts: technical memo, citizen advisory, press summary
 
 ### Rate Limit Resilience
 
@@ -55,11 +59,11 @@ Built-in retry logic with exponential backoff (2s, 4s, 8s, 16s) handles free-tie
 | Page | Purpose |
 |------|---------|
 | **Dashboard** | KPI summary, district risk ranking, morning briefing generation, anomaly timeline |
-| **Upload & Analyze** | CSV upload or synthetic data generation with progress-tracked pipeline |
+| **Upload & Analyze** | CSV upload or synthetic data generation with progress-tracked pipeline, AI data quality narrator with remediation guidance |
 | **Anomaly Explorer** | Multi-filter table, "Why flagged?" detail, differential diagnosis, intervention planner, CSV export |
 | **Year-over-Year** | 2023 vs 2024 comparison by district and drug, seasonal spike detection |
 | **Disease Map** | Folium geographic map with severity-colored markers and regional clustering analysis |
-| **Alerts & Insights** | Structured alerts with lifecycle tracking (New/Investigating/Confirmed/Closed), multilingual translation, streaming on-demand analysis |
+| **Alerts & Insights** | Structured alerts with lifecycle tracking (New/Investigating/Confirmed/Closed), multilingual translation, streaming on-demand analysis, audience-specific public communication drafts (technical memo, citizen advisory, press summary) |
 | **AI Assistant** | Natural language chat powered by Mistral function calling |
 | **Scenario Simulator** | What-if analysis with configurable demand spikes and AI-powered impact explanation |
 | **Evaluation** | Precision/Recall/F1 metrics against 4 known ground truth scenarios |
@@ -175,7 +179,7 @@ pharma-surveillance/
 │   └── app/
 │       ├── config.py                 # Pydantic Settings (env loading)
 │       ├── core/
-│       │   ├── mistral_agent.py      # Mistral AI wrapper (15 functions, 6 SDK features)
+│       │   ├── mistral_agent.py      # Mistral AI wrapper (17 functions, 6 SDK features)
 │       │   ├── detection.py          # 4 anomaly detection algorithms
 │       │   ├── pipeline.py           # Orchestrator: detect -> correlate -> interpret -> alert
 │       │   ├── mappings.py           # Drug-condition maps, correlation rules, district metadata

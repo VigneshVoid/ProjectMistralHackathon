@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280,height=720">
+<title>Pharma Surveillance — Mistral AI Hackathon 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background: #020617; }
+
+  /* Slide container */
+  .deck { position: relative; width: 100vw; height: 100vh; }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 60px 80px;
+    background: radial-gradient(ellipse at top center, #0f172a 0%, #020617 70%);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  /* Ambient glow */
+  .slide::before {
+    content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 400px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Typography */
+  h1 { font-size: 56px; font-weight: 800; color: #f8fafc; text-align: center; line-height: 1.15; letter-spacing: -1px; }
+  h2 { font-size: 40px; font-weight: 700; color: #f8fafc; text-align: center; line-height: 1.2; margin-bottom: 40px; }
+  h3 { font-size: 22px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+  p, li { font-size: 18px; color: #cbd5e1; line-height: 1.6; }
+  .subtitle { font-size: 22px; color: #94a3b8; font-weight: 400; text-align: center; margin-top: 16px; max-width: 700px; }
+  .small { font-size: 14px; color: #64748b; }
+
+  /* Badge */
+  .badge {
+    display: inline-block; padding: 8px 20px; border-radius: 100px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2));
+    border: 1px solid rgba(59,130,246,0.3);
+    color: #93c5fd; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;
+    margin-top: 24px;
+  }
+
+  /* Glass card */
+  .glass {
+    background: rgba(30, 41, 59, 0.4);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px; padding: 28px 24px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .glass:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 100%; max-width: 1100px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; width: 100%; max-width: 1100px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; width: 100%; max-width: 1100px; }
+
+  /* Flow arrow */
+  .flow { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 1050px; justify-content: center; flex-wrap: wrap; }
+  .flow-step {
+    padding: 16px 24px; border-radius: 14px; text-align: center;
+    background: rgba(30,41,59,0.5); border: 1px solid rgba(255,255,255,0.08);
+    color: #e2e8f0; font-weight: 600; font-size: 16px; min-width: 160px;
+  }
+  .flow-arrow { color: #3b82f6; font-size: 28px; font-weight: 700; }
+
+  /* Stats row */
+  .stats-row { display: flex; gap: 40px; justify-content: center; margin-top: 32px; flex-wrap: wrap; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 36px; font-weight: 800; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .stat .label { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+  /* Feature card */
+  .feat-card { text-align: center; padding: 24px 18px; }
+  .feat-card .icon { font-size: 32px; margin-bottom: 12px; display: block; }
+  .feat-card h3 { font-size: 17px; color: #f8fafc; margin-bottom: 8px; }
+  .feat-card p { font-size: 14px; color: #94a3b8; line-height: 1.5; }
+
+  /* Big number */
+  .big-num {
+    font-size: 96px; font-weight: 900; text-align: center;
+    background: linear-gradient(135deg, #10b981, #3b82f6);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    line-height: 1;
+  }
+
+  /* Scenario card */
+  .scenario { text-align: left; padding: 22px; }
+  .scenario .tag {
+    display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .scenario .drugs { font-size: 13px; color: #94a3b8; margin-top: 8px; line-height: 1.5; }
+  .scenario .check { color: #10b981; font-weight: 700; font-size: 15px; margin-top: 10px; }
+
+  /* Callout */
+  .callout {
+    display: flex; align-items: flex-start; gap: 16px;
+    background: rgba(30,41,59,0.35); border-left: 3px solid #3b82f6;
+    padding: 18px 22px; border-radius: 0 14px 14px 0; margin-bottom: 16px;
+    max-width: 1100px; width: 100%;
+  }
+  .callout .emoji { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+  .callout .text h3 { font-size: 18px; color: #f8fafc; margin-bottom: 4px; }
+  .callout .text p { font-size: 15px; color: #94a3b8; }
+
+  /* Quote */
+  .quote {
+    font-size: 26px; font-weight: 500; color: #e2e8f0; text-align: center;
+    max-width: 800px; line-height: 1.5; font-style: italic; margin-top: 24px;
+  }
+  .quote em { color: #93c5fd; font-style: normal; font-weight: 700; }
+
+  /* Panel */
+  .panel { text-align: left; }
+  .panel h3 { font-size: 20px; color: #f8fafc; margin-bottom: 14px; }
+  .panel ul { list-style: none; padding: 0; }
+  .panel li { font-size: 15px; color: #cbd5e1; padding: 6px 0; padding-left: 20px; position: relative; }
+  .panel li::before { content: ''; position: absolute; left: 0; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; }
+
+  /* Method card */
+  .method { text-align: center; padding: 22px 16px; }
+  .method .abbr { font-size: 28px; font-weight: 800; color: #3b82f6; margin-bottom: 8px; }
+  .method h3 { font-size: 16px; margin-bottom: 6px; }
+  .method p { font-size: 13px; color: #94a3b8; }
+
+  /* Slide nav dots */
+  .nav-dots {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 100;
+  }
+  .nav-dots .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(148,163,184,0.25); cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .nav-dots .dot.active { background: #3b82f6; transform: scale(1.3); }
+
+  /* Slide number */
+  .slide-num { position: fixed; bottom: 26px; right: 40px; font-size: 13px; color: #475569; z-index: 100; }
+
+  /* Closing tagline gradient */
+  .tagline {
+    font-size: 30px; font-weight: 600; text-align: center; margin-top: 20px;
+    background: linear-gradient(135deg, #94a3b8, #e2e8f0);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+
+  /* Thank you */
+  .thankyou { font-size: 48px; font-weight: 800; color: #f8fafc; margin-top: 40px; }
+
+  /* Placeholder for screenshots */
+  .screenshot-placeholder {
+    width: 100%; max-width: 500px; height: 260px;
+    background: rgba(30,41,59,0.3); border: 2px dashed rgba(148,163,184,0.2);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    color: #475569; font-size: 14px; font-style: italic;
+  }
+
+  /* Color accents */
+  .text-blue { color: #3b82f6; }
+  .text-purple { color: #a78bfa; }
+  .text-green { color: #10b981; }
+  .text-orange { color: #f97316; }
+  .text-red { color: #ef4444; }
+  .bg-red { background: rgba(239,68,68,0.15); color: #fca5a5; }
+  .bg-blue { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .bg-orange { background: rgba(249,115,22,0.15); color: #fdba74; }
+  .bg-green { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+  /* Mistral logo text */
+  .mistral-text {
+    background: linear-gradient(135deg, #ff6b35, #ffa500);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-weight: 700;
+  }
+
+  /* Pipeline arrow section */
+  .pipeline-section { text-align: center; margin-top: 30px; }
+  .pipeline-label {
+    display: inline-block; padding: 10px 28px; border-radius: 10px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15));
+    border: 1px solid rgba(59,130,246,0.2);
+    color: #93c5fd; font-size: 16px; font-weight: 600;
+  }
+
+  /* Footer stat pill */
+  .stat-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 12px;
+    background: rgba(30,41,59,0.5); border: 1px solid rgba(255,255,255,0.06);
+    color: #cbd5e1; font-size: 15px; font-weight: 500;
+  }
+  .stat-pill .val { font-weight: 700; color: #f8fafc; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- ==================== SLIDE 1: TITLE ==================== -->
+  <div class="slide active" id="s1">
+    <div class="badge">MISTRAL AI HACKATHON 2026</div>
+    <h1 style="margin-top: 28px;">Pharma Surveillance</h1>
+    <p class="subtitle">AI-Powered Epidemiological Intelligence from Pharmacy Sales Data</p>
+    <div class="stats-row" style="margin-top: 40px;">
+      <div class="stat"><div class="num">20</div><div class="label">Districts</div></div>
+      <div class="stat"><div class="num">17</div><div class="label">AI Functions</div></div>
+      <div class="stat"><div class="num">6</div><div class="label">SDK Features</div></div>
+      <div class="stat"><div class="num">100%</div><div class="label">Recall</div></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 2: THE PROBLEM ==================== -->
+  <div class="slide" id="s2">
+    <h2>Pharmacies See Outbreaks First</h2>
+    <div style="display:flex; flex-direction:column; gap:18px; max-width:1000px; width:100%;">
+      <div class="callout">
+        <div class="emoji">💊</div>
+        <div class="text">
+          <h3>Chennai — ORS Sachet Spike</h3>
+          <p>Sales surge <span class="text-red">6x above baseline</span> days before hospitals report a waterborne outbreak</p>
+        </div>
+      </div>
+      <div class="callout" style="border-left-color: #f97316;">
+        <div class="emoji">🫁</div>
+        <div class="text">
+          <h3>Delhi — Inhaler Sales Explode</h3>
+          <p>Salbutamol demand jumps <span class="text-orange">4x across 3 districts</span> simultaneously during air pollution event</p>
+        </div>
+      </div>
+      <div class="callout" style="border-left-color: #8b5cf6;">
+        <div class="emoji">📊</div>
+        <div class="text">
+          <h3>The Signal Is Already There</h3>
+          <p>Pharmacy sales data captures disease patterns <span class="text-purple">before clinical reporting</span></p>
+        </div>
+      </div>
+    </div>
+    <p class="quote" style="margin-top: 28px;">"Can we read it <em>fast enough</em> to save lives?"</p>
+  </div>
+
+  <!-- ==================== SLIDE 3: THE SOLUTION ==================== -->
+  <div class="slide" id="s3">
+    <h2>Turning Sales Data into Health Intelligence</h2>
+    <div class="flow" style="margin-bottom: 36px;">
+      <div class="flow-step">📋 Pharmacy<br>Sales Data</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">📈 Anomaly<br>Detection</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color: rgba(59,130,246,0.3); background: rgba(59,130,246,0.1);">🤖 <span class="mistral-text">Mistral AI</span><br>Interpretation</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.1);">🚨 Actionable<br>Alerts</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="num">20</div><div class="label">Indian Districts</div></div>
+      <div class="stat"><div class="num">13</div><div class="label">Drug Categories</div></div>
+      <div class="stat"><div class="num">100</div><div class="label">Pharmacies</div></div>
+      <div class="stat"><div class="num">18</div><div class="label">Months of Data</div></div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 4: HOW IT WORKS ==================== -->
+  <div class="slide" id="s4">
+    <h2>Detection Engine</h2>
+    <div class="grid-4" style="margin-bottom: 30px;">
+      <div class="glass method">
+        <div class="abbr">Z</div>
+        <h3>Z-Score</h3>
+        <p>Rolling 8-week mean<br>Threshold: 2.0 SD</p>
+      </div>
+      <div class="glass method">
+        <div class="abbr">IQR</div>
+        <h3>IQR Outlier</h3>
+        <p>Q1/Q3 with 1.5x<br>IQR fence</p>
+      </div>
+      <div class="glass method">
+        <div class="abbr">%</div>
+        <h3>% Spike</h3>
+        <p>Week-over-week<br>&gt;200% or &lt;-66%</p>
+      </div>
+      <div class="glass method">
+        <div class="abbr" style="color: #8b5cf6;">E</div>
+        <h3>EWMA</h3>
+        <p>Exponential weighted<br>Alpha = 0.3</p>
+      </div>
+    </div>
+    <div style="color: #3b82f6; font-size: 28px; margin-bottom: 20px;">⬇</div>
+    <div class="pipeline-label">Mistral AI Interpretation Pipeline — Structured Output + Pydantic Validation</div>
+    <div style="display:flex; gap:24px; margin-top:24px; flex-wrap: wrap; justify-content: center;">
+      <span class="stat-pill"><span class="val text-red">Critical</span> z ≥ 4.0</span>
+      <span class="stat-pill"><span class="val text-orange">High</span> z ≥ 3.0</span>
+      <span class="stat-pill"><span class="val" style="color:#facc15;">Medium</span> z ≥ 2.0</span>
+      <span class="stat-pill"><span class="val text-blue">Low</span> Below threshold</span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 5: MISTRAL FEATURES ==================== -->
+  <div class="slide" id="s5">
+    <h2>6 <span class="mistral-text">Mistral</span> SDK Capabilities</h2>
+    <div class="grid-3">
+      <div class="glass feat-card">
+        <span class="icon">💬</span>
+        <h3>chat.complete()</h3>
+        <p>Batch anomaly interpretation, alert generation, and signal correlation</p>
+      </div>
+      <div class="glass feat-card">
+        <span class="icon">🧩</span>
+        <h3>Structured Output</h3>
+        <p><span class="text-blue" style="font-weight:700;">9 Pydantic models</span> — diagnosis, alerts, briefings, interventions</p>
+      </div>
+      <div class="glass feat-card">
+        <span class="icon">⚡</span>
+        <h3>Streaming</h3>
+        <p>Token-by-token live rendering for on-demand analysis</p>
+      </div>
+      <div class="glass feat-card">
+        <span class="icon">🔧</span>
+        <h3>Function Calling</h3>
+        <p>Natural language assistant — Mistral auto-selects the right data tool</p>
+      </div>
+      <div class="glass feat-card">
+        <span class="icon">🌐</span>
+        <h3>Multilingual</h3>
+        <p><span class="text-green" style="font-weight:700;">7 Indian languages</span> — Hindi, Tamil, Telugu, Kannada + more</p>
+      </div>
+      <div class="glass feat-card">
+        <span class="icon">🚀</span>
+        <h3>mistral-medium-latest</h3>
+        <p>Upgraded model for stronger epidemiological reasoning</p>
+      </div>
+    </div>
+    <div style="margin-top: 28px;">
+      <span class="stat-pill"><span class="val">17</span> AI-powered functions</span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 6: DASHBOARD & EXPLORER ==================== -->
+  <div class="slide" id="s6">
+    <h2>Real-Time Surveillance Dashboard</h2>
+    <div class="grid-2">
+      <div class="glass panel">
+        <h3>📊 Dashboard</h3>
+        <ul>
+          <li>KPI summary — anomalies, districts, correlations, alerts</li>
+          <li>District risk ranking with weighted severity scores</li>
+          <li>Morning briefing generation for health officers</li>
+          <li>Anomaly timeline with severity breakdown</li>
+        </ul>
+      </div>
+      <div class="glass panel">
+        <h3>🔍 Anomaly Explorer</h3>
+        <ul>
+          <li>"Why was this flagged?" — detailed drill-down per anomaly</li>
+          <li>Differential diagnosis with ranked probabilities</li>
+          <li>Intervention planner — 24h + 7-day action plans</li>
+          <li>Multi-filter table with CSV export</li>
+        </ul>
+      </div>
+    </div>
+    <div style="display:flex; gap:16px; margin-top:28px; flex-wrap:wrap; justify-content:center;">
+      <span class="stat-pill">📋 <span class="val">9</span> dashboard pages</span>
+      <span class="stat-pill">🎯 <span class="val">4</span> severity levels</span>
+      <span class="stat-pill">📈 <span class="val">9</span> interactive charts</span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 7: MAP & ALERTS ==================== -->
+  <div class="slide" id="s7">
+    <h2>Geographic Intelligence & Smart Alerts</h2>
+    <div class="grid-2">
+      <div class="glass panel">
+        <h3>🗺️ Disease Signal Map</h3>
+        <ul>
+          <li>Folium geographic map with severity-colored markers</li>
+          <li>Regional clustering analysis powered by Mistral</li>
+          <li>District-level drill-down with anomaly counts</li>
+          <li>Dark CartoDB tiles for visual clarity</li>
+        </ul>
+      </div>
+      <div class="glass panel">
+        <h3>🚨 Alerts & Insights</h3>
+        <ul>
+          <li>Full lifecycle tracking — New → Investigating → Confirmed → Closed</li>
+          <li>Multilingual translation into <span class="text-green" style="font-weight:600;">7 languages</span></li>
+          <li>Streaming on-demand deep analysis</li>
+          <li>Public communications — technical memo, citizen advisory, press summary</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 8: ASSISTANT & SIMULATOR ==================== -->
+  <div class="slide" id="s8">
+    <h2>Ask Questions. Simulate Scenarios.</h2>
+    <div class="grid-2">
+      <div class="glass panel">
+        <h3>🤖 AI Assistant</h3>
+        <ul>
+          <li>Natural language queries over surveillance data</li>
+          <li>Mistral <span class="text-blue" style="font-weight:600;">function calling</span> auto-selects data tools</li>
+          <li>Tools: filter_anomalies, get_district_risk, get_correlations, get_summary</li>
+          <li>"Show critical anomalies in Delhi" — just ask</li>
+        </ul>
+      </div>
+      <div class="glass panel">
+        <h3>🧪 Scenario Simulator</h3>
+        <ul>
+          <li>What-if analysis — inject synthetic demand changes</li>
+          <li>Configure: target districts, drug category, multiplier, duration</li>
+          <li>Side-by-side comparison: original vs simulated</li>
+          <li>AI-powered impact explanation with new risk areas</li>
+        </ul>
+      </div>
+    </div>
+    <div style="margin-top:28px;">
+      <span class="stat-pill" style="border-color: rgba(59,130,246,0.3);">🔧 Mistral picks the right data tool <span class="val">automatically</span></span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 9: VALIDATION ==================== -->
+  <div class="slide" id="s9">
+    <h2>Proven Detection Accuracy</h2>
+    <div class="big-num">100% Recall</div>
+    <p style="text-align:center; margin: 12px 0 30px; color:#94a3b8; font-size:16px;">Every injected ground truth event was detected</p>
+    <div class="grid-4">
+      <div class="glass scenario">
+        <span class="tag bg-red">Critical</span>
+        <h3 style="font-size:16px;">Delhi Respiratory Spike</h3>
+        <div class="drugs">Salbutamol 4x, Budesonide 3.5x, Montelukast 3x</div>
+        <div class="check">✓ Detected</div>
+      </div>
+      <div class="glass scenario">
+        <span class="tag bg-blue">Critical</span>
+        <h3 style="font-size:16px;">Chennai Waterborne Outbreak</h3>
+        <div class="drugs">ORS sachets 6x, Metronidazole 5x, Loperamide 4x</div>
+        <div class="check">✓ Detected</div>
+      </div>
+      <div class="glass scenario">
+        <span class="tag bg-orange">High</span>
+        <h3 style="font-size:16px;">Pune Flu Cluster</h3>
+        <div class="drugs">Oseltamivir 3.5x, Paracetamol 2.5x, Cetirizine 2x</div>
+        <div class="check">✓ Detected</div>
+      </div>
+      <div class="glass scenario">
+        <span class="tag bg-green">Gradual</span>
+        <h3 style="font-size:16px;">Vizag Thyroid Anomaly</h3>
+        <div class="drugs">Levothyroxine gradual 50% increase over 4 months</div>
+        <div class="check">✓ Detected</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 10: CLOSING ==================== -->
+  <div class="slide" id="s10">
+    <div class="badge">MISTRAL AI HACKATHON 2026</div>
+    <h1 style="margin-top: 24px; font-size: 44px;">Pharmacy Counters →<br>Public Health Sensors</h1>
+    <p class="tagline">The data already exists. Mistral AI makes it speak.</p>
+    <div style="display:flex; gap:16px; margin-top:36px; flex-wrap:wrap; justify-content:center;">
+      <span class="stat-pill"><span class="val text-blue">6</span> SDK Features</span>
+      <span class="stat-pill"><span class="val text-purple">17</span> AI Functions</span>
+      <span class="stat-pill"><span class="val text-orange">9</span> Pydantic Models</span>
+      <span class="stat-pill"><span class="val text-green">100%</span> Recall</span>
+    </div>
+    <div class="thankyou">Thank You</div>
+    <p style="margin-top: 16px; color: #64748b; font-size: 15px;">Built with <span class="mistral-text">Mistral AI</span> — mistral-medium-latest</p>
+  </div>
+
+</div>
+
+<!-- Navigation dots -->
+<div class="nav-dots" id="dots"></div>
+<div class="slide-num" id="slideNum">1 / 10</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotsContainer = document.getElementById('dots');
+  const slideNum = document.getElementById('slideNum');
+  let current = 0;
+  const total = slides.length;
+
+  // Create dots
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goTo(i);
+    dotsContainer.appendChild(dot);
+  }
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    dotsContainer.children[current].classList.remove('active');
+    current = (n + total) % total;
+    slides[current].classList.add('active');
+    dotsContainer.children[current].classList.add('active');
+    slideNum.textContent = (current + 1) + ' / ' + total;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(total - 1); }
+  });
+
+  // Click to advance (right half) or go back (left half)
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.nav-dots')) return;
+    if (e.clientX > window.innerWidth / 2) goTo(current + 1);
+    else goTo(current - 1);
+  });
+</script>
+</body>
+</html>

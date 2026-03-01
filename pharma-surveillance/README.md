@@ -2,7 +2,7 @@
 
 **AI-Powered Epidemiological Intelligence from Pharmacy Sales Data**
 
-Built for the **Mistral AI Hackathon 2025**, this system detects public health signals by analyzing pharmacy drug sales patterns across 20 Indian districts. It combines statistical anomaly detection with Mistral AI to deliver real-time alerts, structured interpretations, and actionable insights for district health officers.
+Built for the **Mistral AI Hackathon 2026**, this system detects public health signals by analyzing pharmacy drug sales patterns across 20 Indian districts. It combines statistical anomaly detection with Mistral AI to deliver real-time alerts, structured interpretations, and actionable insights for district health officers.
 
 ---
 
@@ -231,4 +231,4 @@ To upload your own data, prepare a CSV with these columns:
 
 ## License
 
-Built for the Mistral AI Hackathon 2025.
+Built for the Mistral AI Hackathon 2026.

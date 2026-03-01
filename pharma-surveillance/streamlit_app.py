@@ -12,6 +12,7 @@ import sys
 import html
 import json
 import math
+import inspect
 from pathlib import Path
 
 # Add backend to path
@@ -327,6 +328,28 @@ if "translations" not in st.session_state:
     st.session_state.translations = {}
 
 
+def run_pipeline_with_progress(
+    df: pd.DataFrame,
+    use_mistral: bool,
+    seasonal_adjust: bool,
+    progress_callback,
+):
+    """Call pipeline with backward-compatible progress callback support."""
+    kwargs = {
+        "use_mistral": use_mistral,
+        "seasonal_adjust": seasonal_adjust,
+    }
+    try:
+        if "progress_callback" in inspect.signature(run_pipeline).parameters:
+            kwargs["progress_callback"] = progress_callback
+        return run_pipeline(df, **kwargs)
+    except TypeError as exc:
+        # Some environments may resolve an older pipeline module at runtime.
+        if "progress_callback" in str(exc):
+            return run_pipeline(df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust)
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -510,8 +533,10 @@ if page == "Dashboard":
                     progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
                     status_text.caption(f"Step {step}/{total}: {msg}")
 
-                results = run_pipeline(
-                    df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+                results = run_pipeline_with_progress(
+                    df,
+                    use_mistral=use_mistral,
+                    seasonal_adjust=seasonal_adjust,
                     progress_callback=_on_progress,
                 )
                 st.session_state.pipeline_results = results
@@ -700,8 +725,10 @@ elif page == "Upload & Analyze":
                     progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
                     status_text.caption(f"Step {step}/{total}: {msg}")
 
-                results = run_pipeline(
-                    df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+                results = run_pipeline_with_progress(
+                    df,
+                    use_mistral=use_mistral,
+                    seasonal_adjust=seasonal_adjust,
                     progress_callback=_on_progress,
                 )
                 st.session_state.pipeline_results = results
@@ -738,8 +765,10 @@ elif page == "Upload & Analyze":
                 progress_bar.progress(min(step / max(total, 1), 1.0), text=msg)
                 status_text.caption(f"Step {step}/{total}: {msg}")
 
-            results = run_pipeline(
-                df, use_mistral=use_mistral, seasonal_adjust=seasonal_adjust,
+            results = run_pipeline_with_progress(
+                df,
+                use_mistral=use_mistral,
+                seasonal_adjust=seasonal_adjust,
                 progress_callback=_on_progress,
             )
             st.session_state.pipeline_results = results
